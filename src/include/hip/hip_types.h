@@ -482,6 +482,7 @@ typedef struct _hi_node {
   __u32 update_id;              /* this host's Update ID		*/
   /* Options */
   char algorithm_id;
+  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
@@ -496,6 +497,7 @@ struct peer_node
   int size;       /* Size in bytes of the Host Identity   */
   __u64 r1_gen_count;
   char algorithm_id;
+  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
