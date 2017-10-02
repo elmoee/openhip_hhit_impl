@@ -2260,11 +2260,11 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
 
   /* KHI = Prefix | Encode_n( Hash)
    */
-  prefix = htonl(HIT_PREFIX_SHA1_32BITS);
+  prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
   khi_encode_n(hash, SHA_DIGEST_LENGTH, &hit[3], 100 );
   /* lower 100 bits of HIT */
-  hit[3] = (HIT_PREFIX_SHA1_32BITS & 0xFF) |
+  hit[3] = (HIT_PREFIX_32BITS & 0xFF) |
            (hit[3] & 0x0F);       /* fixup the 4th byte */
   free(data);
   return(0);
