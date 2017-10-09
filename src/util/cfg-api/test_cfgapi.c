@@ -489,22 +489,22 @@ int main(void)
 
   for (i = 0; i < 30; i++)
     {
-      SHA_CTX c;
-      unsigned char md[SHA_DIGEST_LENGTH];
+      SHA256_CTX c;
+      unsigned char md[SHA56_DIGEST_LENGTH];
       unsigned char rsa_sig[1024];
       unsigned char data[512];
       unsigned int sig_len;
 
-      SHA1_Init(&c);
-      SHA1_Update(&c, data, sizeof(data));
-      SHA1_Final(md, &c);
+      SHA256_Init(&c);
+      SHA256_Update(&c, data, sizeof(data));
+      SHA256_Final(md, &c);
 
       if (hi->rsa)
         {
           sig_len = RSA_size(hi->rsa);
-          rc = RSA_sign(NID_sha1,
+          rc = RSA_sign(NID_sha256,
                         md,
-                        SHA_DIGEST_LENGTH,
+                        SHA256_DIGEST_LENGTH,
                         rsa_sig,
                         &sig_len,
                         hi->rsa);
@@ -520,9 +520,9 @@ int main(void)
         }
 
       sig_len = RSA_size(hi->rsa);
-      rc = RSA_verify(NID_sha1,
+      rc = RSA_verify(NID_sha256,
                       md,
-                      SHA_DIGEST_LENGTH,
+                      SHA256_DIGEST_LENGTH,
                       rsa_sig,
                       sig_len,
                       EVP_PKEY_get1_RSA(pubkey));

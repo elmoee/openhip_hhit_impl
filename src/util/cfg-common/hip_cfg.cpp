@@ -438,8 +438,8 @@ int hipCfg::hi_to_hit(hi_node *hi, hip_hit hit)
 {
   int len;
   __u8 *data = NULL;
-  SHA_CTX ctx;
-  unsigned char hash[SHA_DIGEST_LENGTH];
+  SHA256_CTX ctx;
+  unsigned char hash[SHA256_DIGEST_LENGTH];
   __u32 prefix;
   const unsigned char khi_context_id[16] = {
     0xf0, 0xef, 0xf0, 0x2f, 0xbf, 0xf4, 0x3d, 0x0f,
@@ -500,15 +500,15 @@ int hipCfg::hi_to_hit(hi_node *hi, hip_hit hit)
   memcpy(&data[0], khi_context_id, sizeof(khi_context_id));
   khi_hi_input(hi, &data[sizeof(khi_context_id)]);
   /* Compute the hash */
-  SHA1_Init(&ctx);
-  SHA1_Update(&ctx, data, len);
-  SHA1_Final(hash, &ctx);
+  SHA256_Init(&ctx);
+  SHA256_Update(&ctx, data, len);
+  SHA256_Final(hash, &ctx);
 
   /* KHI = Prefix | OGA ID | Encode_n( Hash)
    */
   prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
-  khi_encode_n(hash, SHA_DIGEST_LENGTH, &hit[4], 96 );
+  khi_encode_n(hash, SHA256_DIGEST_LENGTH, &hit[4], 96 );
   /* lower 96 bits of HIT */
   hit[3] |= (0x0F & hi->hit_suite_id); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
 
@@ -589,7 +589,7 @@ int hipCfg::bn2bin_safe(const BIGNUM *a, unsigned char *to, int len)
 int hipCfg::khi_encode_n(__u8 *in, int len, __u8 *out, int n)
 {
   BIGNUM *a;
-  int m = ((SHA_DIGEST_LENGTH * 8) - n) / 2;
+  int m = ((SHA256_DIGEST_LENGTH * 8) - n) / 2;
   /*
    * take middle n bits of a number:
    *
