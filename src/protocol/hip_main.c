@@ -178,7 +178,8 @@ int main_loop(int argc, char **argv)
    * Set default configuration
    * later modified by command-line parameters or conf file
    */
-  memset(&HCNF, 0, sizeof(struct hip_conf));
+  __u8 DEFAULT_DH_GROUP_LIST[] = {DH_MODP_3072, DH_MODP_1536};
+  memset(&HCNF,	0,	sizeof(struct hip_conf));
   HCNF.cookie_difficulty = 10;
   HCNF.cookie_lifetime = 39;       /* 2^(39-32) = 2^7 = 128 seconds */
   HCNF.packet_timeout = 5;
@@ -188,6 +189,9 @@ int main_loop(int argc, char **argv)
   HCNF.preferred_hi = NULL;
   HCNF.send_hi_name = TRUE;
   HCNF.dh_group = DEFAULT_DH_GROUP_ID;
+  HCNF.dh_group_list_length = sizeof(DEFAULT_DH_GROUP_LIST)/sizeof(__u8);
+  HCNF.dh_group_list = malloc(sizeof(DEFAULT_DH_GROUP_LIST));
+  memcpy(HCNF.dh_group_list, DEFAULT_DH_GROUP_LIST, HCNF.dh_group_list_length*sizeof(__u8));
   HCNF.dh_lifetime = 900;
   HCNF.r1_lifetime = 300;
   HCNF.msl = 5;
@@ -675,11 +679,13 @@ int main_loop(int argc, char **argv)
             {
               last_expire = time1.tv_sec;
               /* expire old DH contexts */
-              expire_old_dh_entries();
-              /* precompute a new R1 for each HI, and
-               * sometimes pick a new random index for
-               * cookies */
-              replace_next_R1();
+              for(int i = 0; i < HCNF.dh_group_list_length; ++i){
+                expire_old_dh_entries(HCNF.dh_group_list[i]);
+                /* precompute a new R1 for each HI, and
+                 * sometimes pick a new random index for
+                 * cookies */
+                replace_next_R1(HCNF.dh_group_list[i]);
+              }
             }
           if (OPT.trigger)
             {

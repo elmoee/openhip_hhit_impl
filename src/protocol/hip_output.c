@@ -81,6 +81,7 @@
  * Forward declaration of local functions.
  */
 int hip_check_bind(struct sockaddr *src, int num_attempts);
+int build_tlv_dh_group_list ( __u8 *data );
 int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
@@ -114,7 +115,7 @@ extern void del_divert_rule(int);
  */
 int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 {
-  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac)];
+  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac) + sizeof(_tlv_dh_group_list) + HCNF.dh_group_list_length*sizeof(__u8)];
   struct sockaddr *src, *dst;
   hiphdr *hiph;
   int location = 0, do_retrans;
@@ -157,7 +158,6 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
       hiph->hdr_len = (location / 8) - 1;
       location += build_tlv_hmac(hip_a, buff, location,
                                  PARAM_RVS_HMAC);
-
       hiph->hdr_len = (location / 8) - 1;
 
       /* send the packet */
@@ -215,6 +215,8 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
         }
 
       location = sizeof(hiphdr);
+      location += build_tlv_dh_group_list(&buff[location]);
+      hiph->hdr_len = (location / 8) - 1;
       log_(NORMT, "Sending HIP_I1 packet (%d bytes)...\n", location);
       do_retrans = TRUE;
     }
@@ -252,7 +254,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 
   /* make a copy of a pre-computed R1 from the cache */
   i = compute_R1_cache_index(hiti, TRUE);
-  r1_entry = &hi->r1_cache[i];
+  r1_entry = &hi->r1_cache[HCNF.choosen_dh_group][i];
   total_len = r1_entry->len;
   log_(NORM,"Using premade R1 from %s cache slot %d.\n", hi->name, i);
 
@@ -413,8 +415,11 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   /* hip_signature_2 - receiver's HIT and checksum zeroed */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_signature(hi, data, location, TRUE);
 
+  location += build_tlv_dh_group_list(&data[location]);
+  hiph->hdr_len = (location / 8) - 1;
+
+  location += build_tlv_signature(hi, data, location, TRUE);
   hiph->hdr_len = (location / 8) - 1;
 
   /* insert the cookie (OPAQUE and I) */
@@ -1961,6 +1966,20 @@ int hip_check_bind(struct sockaddr *src, int num_attempts)
 
   closesocket(s);
   return(ret);
+}
+
+
+int build_tlv_dh_group_list ( __u8 *data ){
+  int dh_group_size = HCNF.dh_group_list_length * sizeof(__u8);
+  _tlv_dh_group_list *dhGroupList =  malloc(sizeof(_tlv_dh_group_list) + dh_group_size);
+  memcpy(dhGroupList -> group_ids, HCNF.dh_group_list, dh_group_size);
+  dhGroupList -> type =  htons(PARAM_DH_GROUP_LIST);
+  dhGroupList -> length = htons((__u16) HCNF.dh_group_list_length);
+
+  int len = sizeof(dhGroupList);
+  memcpy(data, dhGroupList, len);
+  free(dhGroupList);
+  return eight_byte_align(len);
 }
 
 /*****************************************

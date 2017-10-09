@@ -477,7 +477,7 @@ typedef struct _hi_node {
   int size;                     /* Size in bytes of the Host Identity	*/
   DSA *dsa;                     /* HI in DSA format			*/
   RSA *rsa;                     /* HI in RSA format			*/
-  struct _r1_cache_entry r1_cache[R1_CACHE_SIZE];       /* the R1 cache	*/
+  struct _r1_cache_entry r1_cache [DH_MAX][R1_CACHE_SIZE];       /* the R1 cache	*/
   __u64 r1_gen_count;           /* R1 generation counter		*/
   __u32 update_id;              /* this host's Update ID		*/
   /* Options */
@@ -587,22 +587,21 @@ typedef struct _tlv_solution
   __u64 j;
 } tlv_solution;
 
+typedef	struct	_tlv_dh_group_list
+{
+    __u16	type;
+    __u16	length;
+    __u8	group_ids[];
+} _tlv_dh_group_list;
+
 typedef struct _tlv_diffie_hellman
 {
   __u16 type;
   __u16 length;
   __u8 group_id;
   __u16 pub_len;
-  __u8 pub[1];       /* variable length */
+  __u8 pub[0];       /* variable length */
 } __attribute__ ((packed)) tlv_diffie_hellman;
-
-/* used for second DH public value */
-typedef struct _tlv_diffie_hellman_pub_value
-{
-  __u8 group_id;
-  __u16 pub_len;
-  __u8 pub[1];       /* variable length */
-} __attribute__ ((packed)) tlv_diffie_hellman_pub_value;
 
 typedef struct _tlv_hip_transform
 {
@@ -916,6 +915,9 @@ struct hip_conf {
   char conf_filename[255];
   char my_hi_filename[255];
   char known_hi_filename[255];
+  int dh_group_list_length;
+  __u8 choosen_dh_group;
+  __u8 *dh_group_list;
 };
 
 #endif /* _HIP_TYPES_H_*/

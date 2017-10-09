@@ -97,7 +97,10 @@ void init_all_R1_caches()
   /* initialize the cache for every one of our HIs */
   for (h = my_hi_head; h; h = h->next)
     {
-      init_R1_cache(h);
+      for(int i = 0; i < HCNF.dh_group_list_length; ++i){
+        init_R1_cache(h, HCNF.dh_group_list[i]);
+      }
+
     }
 }
 
@@ -108,7 +111,7 @@ void init_all_R1_caches()
  *
  * Populate the R1 cache with pre-computed R1s.
  */
-void init_R1_cache(hi_node *hi)
+void init_R1_cache(hi_node *hi, __u8 dh_group)
 {
   int i, len;
   r1_cache_entry *entry;
@@ -127,13 +130,13 @@ void init_R1_cache(hi_node *hi)
       hi->r1_gen_count++;
     }
 
-  len = calculate_r1_length(hi);
+  len = calculate_r1_length(hi, dh_group);
 
   for (i = 0; i < R1_CACHE_SIZE; i++)
     {
-      entry = &hi->r1_cache[i];
+      entry = &hi->r1_cache[dh_group][i];
       entry->current_puzzle = generate_cookie();
-      entry->dh_entry = get_dh_entry(HCNF.dh_group, FALSE);
+      entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
       entry->packet = (__u8 *) malloc(len);
       if (entry->packet == NULL)
@@ -182,7 +185,7 @@ hipcookie *generate_cookie()
  * Called every few minutes to expire and replace one R1.
  * Also picks a new random number for the cookie index mapping function.
  */
-void replace_next_R1()
+void replace_next_R1(__u8 dh_group)
 {
   hi_node *h;
   r1_cache_entry *entry;
@@ -202,7 +205,7 @@ void replace_next_R1()
   for (h = my_hi_head; h; h = h->next)
     {
 
-      entry = &h->r1_cache[current_index];
+      entry = &h->r1_cache[dh_group][current_index];
       /* new R1 entry may use a different cookie, DH entry */
       entry->dh_entry->ref_count--;
       if (entry->previous_puzzle)
@@ -212,10 +215,10 @@ void replace_next_R1()
       entry->previous_puzzle = entry->current_puzzle;
       /* generate a new R1 entry */
       entry->current_puzzle = generate_cookie();
-      entry->dh_entry = get_dh_entry(HCNF.dh_group, FALSE);
+      entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
       free(entry->packet);
-      packet_len = calculate_r1_length(h);
+      packet_len = calculate_r1_length(h, dh_group);
       entry->packet = (__u8 *) malloc(packet_len);
       if (entry->packet == NULL)
         {
@@ -286,7 +289,7 @@ int compute_R1_cache_index(hip_hit *hiti, __u8 current)
   return (r);
 }
 
-int calculate_r1_length(hi_node *hi)
+int calculate_r1_length(hi_node *hi, __u8 dh_group)
 {
   int i, len, num_hip_transforms = 0, num_esp_transforms = 0, hi_len = 0;
 
@@ -308,7 +311,7 @@ int calculate_r1_length(hi_node *hi)
   len =   sizeof(hiphdr) + sizeof(tlv_esp_info) + 2 *
         sizeof(tlv_locator) +
         sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) +
-        sizeof(tlv_diffie_hellman) + dhprime_len[HCNF.dh_group] +
+        sizeof(tlv_diffie_hellman) + dhprime_len[dh_group] +
         eight_byte_align(sizeof(tlv_hip_transform) - 2 +
                          2 * num_hip_transforms) +
         eight_byte_align(sizeof(tlv_esp_transform) - 2 +
@@ -351,7 +354,7 @@ void init_dh_cache()
     {
       return;
     }
-  dh_cache = new_dh_cache_entry(HCNF.dh_group);
+  dh_cache = new_dh_cache_entry(HCNF.dh_group); // TODO: remove
 }
 
 /*
@@ -461,7 +464,7 @@ void unuse_dh_entry(DH *dh)
  * Called periodically to expire stale entries and delete unused entries
  * from the cache.
  */
-void expire_old_dh_entries()
+void expire_old_dh_entries(__u8 dh_group)
 {
   dh_cache_entry *entry, *last = NULL, *next, *old;
   struct timeval now;
@@ -481,7 +484,7 @@ void expire_old_dh_entries()
             {
               old = entry;
               /* replace default entry */
-              if (old->group_id == HCNF.dh_group)
+              if (old->group_id == dh_group)
                 {
                   entry =
                     new_dh_cache_entry(

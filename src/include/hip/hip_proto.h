@@ -94,12 +94,13 @@ typedef enum {
 
 /* HIP TLV parameters */
 #define PARAM_ESP_INFO                  65
-#define PARAM_R1_COUNTER                128
+#define PARAM_R1_COUNTER                129
 #define PARAM_LOCATOR                   193
 #define PARAM_PUZZLE                    257
 #define PARAM_SOLUTION                  321
 #define PARAM_SEQ                       385
 #define PARAM_ACK                       449
+#define	PARAM_DH_GROUP_LIST	            511
 #define PARAM_DIFFIE_HELLMAN            513
 #define PARAM_HIP_TRANSFORM             577
 #define PARAM_ENCRYPTED                 641
@@ -226,18 +227,24 @@ typedef enum {
 /* Diffie-Hellman Group IDs */
 typedef enum {
   DH_RESERVED,
-  DH_384,
-  DH_OAKLEY_1,
+  DH_DEPRICATED1,
+  DH_DEPRECATED2,
   DH_MODP_1536,
   DH_MODP_3072,
-  DH_MODP_6144,
-  DH_MODP_8192,
+  DH_DEPRECATED3,
+  DH_DEPRECATED4,
+  DH_NIST_256,
+  DH_NIST_384,
+  DH_NIST_521,
+  DH_SECP160R1,
+  DH_MODP_2048,
   DH_MAX
 } DH_GROUP_IDS;
 /* choose default DH group here */
 #define DEFAULT_DH_GROUP_ID  DH_MODP_1536
-#define DH_MAX_LEN 1024
 
+//extern const __u8 DEFAULT_DH_GROUP_LIST[] = {DH_MODP_1536, DH_MODP_3072};
+#define DH_MAX_LEN 1024
 /*
  * HIP LOCATOR parameters
  */
