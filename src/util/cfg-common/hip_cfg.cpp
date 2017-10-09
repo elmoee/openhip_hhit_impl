@@ -1016,6 +1016,11 @@ int hipCfg::getEndboxMapsFromLocalFile()
                       p->allow_incoming = 0;
                     }
                 }
+              else if (strcmp((char *)attr->name, "hit_suite_id") == 0)
+                {
+                  sscanf(value, "%d", &tmp);
+                  p->hit_suite_id = (char)tmp;
+                }
               else if (strcmp((char *)attr->name, "r1count") == 0)
                 {
                   sscanf(value, "%llu", &p->r1_gen_count);
