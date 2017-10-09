@@ -510,7 +510,7 @@ int hipCfg::hi_to_hit(hi_node *hi, hip_hit hit)
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
   khi_encode_n(hash, SHA_DIGEST_LENGTH, &hit[4], 96 );
   /* lower 96 bits of HIT */
-  hit[3] |= hi->hit_suite_id; /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
+  hit[3] |= (0x0F & hi->hit_suite_id); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
 
   free(data);
   return(0);
