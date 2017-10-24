@@ -60,6 +60,7 @@ extern dh_cache_entry *dh_cache;
 extern const unsigned char *dhprime[DH_MAX];
 extern const int dhprime_len[DH_MAX]; /* only used by new_dh_cache_entry()
                                        *    use DH_size() elsewhere */
+extern const unsigned int ec_curve_nid[DH_MAX];
 extern unsigned char dhgen[DH_MAX];
 
 

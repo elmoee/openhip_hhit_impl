@@ -1,0 +1,70 @@
+cmake_minimum_required(VERSION 3.8)
+project(openhip)
+
+set(CMAKE_CXX_STANDARD 11)
+include_directories(${CMAKE_SOURCE_DIR}/src/include)
+find_package(LibXml2 REQUIRED)
+include_directories(${LIBXML2_INCLUDE_DIR})
+set(SOURCE_FILES
+        patches/openhip-bind/hi2dns.c
+        patches/openhip-bind/hi2dns.h
+        patches/openhip-bind/hip_55.c
+        patches/openhip-bind/hip_55.h
+        src/include/hip/endbox_utils.h
+        src/include/hip/hip_cfg.h
+        src/include/hip/hip_cfg_api.h
+        src/include/hip/hip_cfg_files.h
+        src/include/hip/hip_cfg_map.h
+        src/include/hip/hip_dns.h
+        src/include/hip/hip_funcs.h
+        src/include/hip/hip_globals.h
+        src/include/hip/hip_mr.h
+        src/include/hip/hip_proto.h
+        src/include/hip/hip_sadb.h
+        src/include/hip/hip_service.h
+        src/include/hip/hip_status.h
+        src/include/hip/hip_types.h
+        src/include/hip/hip_usermode.h
+        src/include/mac/mac_types.h
+        src/include/win32/checksum.h
+        src/include/win32/ip.h
+        src/include/win32/netlink.h
+        src/include/win32/types.h
+        src/linux/hip_linux_umh.c
+        src/mac/hip_mac.c
+        src/protocol/hip_addr.c
+        src/protocol/hip_cache.c
+        src/protocol/hip_dht.c
+        src/protocol/hip_globals.c
+        src/protocol/hip_input.c
+        src/protocol/hip_ipsec.c
+        src/protocol/hip_keymat.c
+        src/protocol/hip_main.c
+        src/protocol/hip_output.c
+        src/protocol/hip_status.c
+        src/usermode/hip_dns.c
+        src/usermode/hip_endbox.c
+        src/usermode/hip_esp.c
+        src/usermode/hip_mr.c
+        src/usermode/hip_nl.c
+        src/usermode/hip_sadb.c
+        src/usermode/hip_status2.c
+        src/usermode/hip_umh_main.c
+        src/util/cfg-api/hip_cfg_api.c
+        src/util/cfg-api/test_cfgapi.c
+        src/util/cfg-common/hip_cfg.cpp
+        src/util/cfg-files/hip_cfg_files.cpp
+        src/util/cfg-ifmap/hip_cfg_map.cpp
+        src/util/cfg-ifmap/ifmap_client.cpp
+        src/util/cfg-ifmap/ifmap_client.h
+        src/util/cfg-ifmap/ifmap_thread.cpp
+        src/util/cfg-ifmap/ifmap_thread.h
+        src/util/checksum_test.c
+        src/util/hip_util.c
+        src/util/hip_xml.c
+        src/util/hitgen.c
+        src/util/usermode-status.c
+        src/win32/hip_service.c
+        src/win32/socketpair.c)
+
+add_executable(openhip ${SOURCE_FILES})

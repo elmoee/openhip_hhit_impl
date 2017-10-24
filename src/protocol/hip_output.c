@@ -72,6 +72,7 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
+#include <openssl/x509.h>
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -82,7 +83,7 @@
  */
 int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh_group_list ( __u8 *data );
-int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
+int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
@@ -115,7 +116,7 @@ extern void del_divert_rule(int);
  */
 int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 {
-  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac) + sizeof(_tlv_dh_group_list) + HCNF.dh_group_list_length*sizeof(__u8)];
+  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac) + sizeof(tlv_dh_group_list) + HCNF.dh_group_list_length*sizeof(__u8)];
   struct sockaddr *src, *dst;
   hiphdr *hiph;
   int location = 0, do_retrans;
@@ -388,7 +389,10 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   /* Diffie Hellman */
   location += build_tlv_dh(&data[location], dh_entry->group_id,
-                           dh_entry->dh, OPT.debug_R1);
+                           dh_entry->evp_dh, OPT.debug_R1);
+
+  location += build_tlv_dh_group_list(&data[location]);
+  hiph->hdr_len = (location / 8) - 1;
 
   /* HIP transform */
   location += build_tlv_transform(&data[location],
@@ -414,9 +418,6 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
                                   0);
 
   /* hip_signature_2 - receiver's HIT and checksum zeroed */
-  hiph->hdr_len = (location / 8) - 1;
-
-  location += build_tlv_dh_group_list(&data[location]);
   hiph->hdr_len = (location / 8) - 1;
 
   location += build_tlv_signature(hi, data, location, TRUE);
@@ -563,7 +564,7 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* diffie_hellman */
   location += build_tlv_dh(&buff[location], hip_a->dh_group_id,
-                           hip_a->dh, OPT.debug);
+                           hip_a->evp_dh, OPT.debug);
 
   /* hip transform */
   location += build_tlv_transform(&buff[location],
@@ -1971,7 +1972,7 @@ int hip_check_bind(struct sockaddr *src, int num_attempts)
 
 int build_tlv_dh_group_list ( __u8 *data ){
   int dh_group_size = HCNF.dh_group_list_length * sizeof(__u8);
-  _tlv_dh_group_list *dhGroupList =  malloc(sizeof(_tlv_dh_group_list) + dh_group_size);
+  tlv_dh_group_list *dhGroupList =  malloc(sizeof(tlv_dh_group_list) + dh_group_size);
   memcpy(dhGroupList -> group_ids, HCNF.dh_group_list, dh_group_size);
   dhGroupList -> type =  htons(PARAM_DH_GROUP_LIST);
   dhGroupList -> length = htons((__u16) HCNF.dh_group_list_length);
@@ -1993,13 +1994,13 @@ int build_tlv_dh_group_list ( __u8 *data ){
  * and when parsing the R1 for the DH in I2.
  * Returns the number of bytes that it advances.
  */
-int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
+int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
 {
   tlv_diffie_hellman *d;
-  unsigned char *bin;
+  unsigned char *bin, *p;
   int len;
 
-  if (dh == NULL)
+  if (evp_dh == NULL)
     {
       log_(WARN, "No Diffie Hellman context for DH tlv.\n");
       return(0);
@@ -2010,15 +2011,19 @@ int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
   d->group_id =  group_id;
 
   /* put dh->pub_key into tlv */
-  len = dhprime_len[group_id];
+  len = i2d_PUBKEY(evp_dh, NULL);
+
   bin = (unsigned char*) malloc(len);
+  p = bin;
   if (!bin)
     {
       log_(WARN, "malloc error - generating Diffie Hellman\n");
       return(0);
     }
-  len = bn2bin_safe(dh->pub_key, bin, len);
+  log_(NORM, "Length %d.\n", len);
+  len = i2d_PUBKEY(evp_dh, &p);
   memcpy(d->pub, bin, len);
+  print_hex(d->pub, len);
 
   d->pub_len = ntohs((__u16)len);
   d->length = htons((__u16)(3 + len));       /* group_id + pub */
@@ -2032,6 +2037,7 @@ int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
     }
 #endif
   free(bin);
+  //free(p);
 
   len += 5;       /* tlv hdr + group_id + pub */
   len = eight_byte_align(len);
@@ -2723,7 +2729,7 @@ int build_rekey(hip_assoc *hip_a)
       dh_entry->ref_count++;
       hip_a->rekey->keymat_index = 0;
       hip_a->rekey->dh_group_id = new_group_id;
-      hip_a->rekey->dh = dh_entry->dh;
+      hip_a->rekey->dh = dh_entry->evp_dh;
     }
 
   gettimeofday(&hip_a->rekey->rk_time, NULL);

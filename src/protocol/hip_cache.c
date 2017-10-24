@@ -59,6 +59,8 @@
 #include <hip/hip_types.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
+#include <openssl/ec.h>
+#include <openssl/x509.h>
 
 
 static __u32 current_rand;  /* current random num. used to get cookie index  */
@@ -130,7 +132,6 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
       hi->r1_gen_count++;
     }
 
-  len = calculate_r1_length(hi, dh_group);
 
   for (i = 0; i < R1_CACHE_SIZE; i++)
     {
@@ -138,6 +139,8 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
       entry->current_puzzle = generate_cookie();
       entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
+      // TODO: move len, only do once
+      len = calculate_r1_length(hi, entry->dh_entry);
       entry->packet = (__u8 *) malloc(len);
       if (entry->packet == NULL)
         {
@@ -150,6 +153,7 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
       entry->previous_puzzle = NULL;
       gettimeofday(&entry->creation_time, NULL);
     }
+
 
 }
 
@@ -218,7 +222,7 @@ void replace_next_R1(__u8 dh_group)
       entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
       free(entry->packet);
-      packet_len = calculate_r1_length(h, dh_group);
+      packet_len = calculate_r1_length(h, entry->dh_entry);
       entry->packet = (__u8 *) malloc(packet_len);
       if (entry->packet == NULL)
         {
@@ -289,7 +293,7 @@ int compute_R1_cache_index(hip_hit *hiti, __u8 current)
   return (r);
 }
 
-int calculate_r1_length(hi_node *hi, __u8 dh_group)
+int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry)
 {
   int i, len, num_hip_transforms = 0, num_esp_transforms = 0, hi_len = 0;
 
@@ -307,11 +311,14 @@ int calculate_r1_length(hi_node *hi, __u8 dh_group)
     }
 
   hi_len = build_tlv_hostid_len(hi, HCNF.send_hi_name);
+  int dh_public_len = i2d_PUBKEY(dh_entry->evp_dh, NULL);
+  int dh_group_list_len = sizeof(tlv_dh_group_list) + HCNF.dh_group_list_length*sizeof(__u8);
 
   len =   sizeof(hiphdr) + sizeof(tlv_esp_info) + 2 *
         sizeof(tlv_locator) +
         sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) +
-        sizeof(tlv_diffie_hellman) + dhprime_len[dh_group] +
+        sizeof(tlv_diffie_hellman) + dh_public_len +
+        dh_group_list_len +
         eight_byte_align(sizeof(tlv_hip_transform) - 2 +
                          2 * num_hip_transforms) +
         eight_byte_align(sizeof(tlv_esp_transform) - 2 +
@@ -325,7 +332,6 @@ int calculate_r1_length(hi_node *hi, __u8 dh_group)
       len +=  eight_byte_align(sizeof(tlv_reg_info) +
                                HCNF.num_reg_types - 1);
     }
-
   return(eight_byte_align(len));
 }
 
@@ -372,27 +378,49 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
   dh_cache_entry *entry;
 
   entry = (dh_cache_entry*) malloc(sizeof(dh_cache_entry));
+  entry->evp_dh     = EVP_PKEY_new();
   entry->next       = NULL;
   entry->group_id   = group_id;
   entry->is_current = TRUE;
   entry->ref_count  = 0;
 
-  entry->dh    = DH_new();
-  entry->dh->g = BN_new();
-  entry->dh->p = BN_new();
-  /* Put prime corresponding to group_id into dh->p */
-  BN_bin2bn(dhprime[group_id],
-            dhprime_len[group_id], entry->dh->p);
-  /* Put generator corresponding to group_id into dh->g */
-  BN_set_word(entry->dh->g, dhgen[group_id]);
-  /* By not setting dh->priv_key, allow crypto lib to pick at random */
-  if ((err = DH_generate_key(entry->dh)) != 1)
+  if(group_id >=6 && group_id <= 9) {
+    EC_GROUP *ec_group;
+    EC_KEY   *ec_key = EC_KEY_new();
+    ec_group = EC_GROUP_new_by_curve_name(ec_curve_nid[group_id]);
+    EC_KEY_set_group(ec_key, ec_group);
+    if ( EC_KEY_generate_key(ec_key) != 1)
     {
       log_(ERR, "DH key generation failed.\n");
       log_(NORMT, "DH key generation failed.\n");
       exit(1);
     }
+
+    EVP_PKEY_assign_EC_KEY(entry->evp_dh,ec_key);
+  }
+  else
+  {
+    DH *dh = DH_new();
+    dh->g = BN_new();
+    dh->p = BN_new();
+    /* Put prime corresponding to group_id into dh->p */
+    BN_bin2bn(dhprime[group_id],
+              dhprime_len[group_id], dh->p);
+    /* Put generator corresponding to group_id into dh->g */
+    BN_set_word(dh->g, dhgen[group_id]);
+    /* By not setting dh->priv_key, allow crypto lib to pick at random */
+    if ((err = DH_generate_key(dh)) != 1)
+    {
+      log_(ERR, "DH key generation failed.\n");
+      log_(NORMT, "DH key generation failed.\n");
+      exit(1);
+    }
+
+    EVP_PKEY_assign_DH(entry->evp_dh, dh);
+  }
+
   gettimeofday(&entry->creation_time, NULL);
+  log_(NORM, " in new_dh_cache_entry. group_id %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", group_id);
   return(entry);
 }
 
@@ -439,13 +467,13 @@ dh_cache_entry *get_dh_entry(__u8 group_id, int new)
  * Given a DH context, find the corresponding cache entry and decrement
  * its usage count.
  */
-void unuse_dh_entry(DH *dh)
+void unuse_dh_entry(EVP_PKEY *evp_dh)
 {
   dh_cache_entry *entry;
 
   for (entry = dh_cache; entry != NULL; entry = entry->next)
     {
-      if (entry->dh == dh)
+      if (entry->evp_dh == evp_dh)
         {
           if (entry->ref_count > 0)
             {
@@ -512,7 +540,7 @@ void expire_old_dh_entries(__u8 dh_group)
                       dh_cache = next;
                     }
                 }
-              DH_free(old->dh);
+              EVP_PKEY_free(old->evp_dh);
               memset(old, 0, sizeof(dh_cache_entry));
               free(old);
             }

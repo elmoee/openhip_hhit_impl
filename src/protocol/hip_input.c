@@ -72,6 +72,7 @@
 #include <hip/hip_funcs.h>
 #include <hip/hip_sadb.h>
 #include <stdbool.h>
+#include <openssl/x509.h>
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -92,7 +93,7 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
 hi_node *check_if_my_hit(hip_hit *hit);
 int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp);
 int handle_cert(hip_assoc *hip_a, const __u8 *data);
-int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh);
+int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, EVP_PKEY *evp_dh);
 int handle_acks(hip_assoc *hip_a, tlv_ack *ack);
 int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk);
 int handle_locators(hip_assoc *hip_a, locator **locators,
@@ -352,8 +353,8 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
       }
     }
     else if (type == PARAM_DH_GROUP_LIST){
-      _tlv_dh_group_list *dhGroupList = malloc(sizeof(_tlv_dh_group_list) + length * sizeof(__u8));
-      memcpy(dhGroupList, &data[location] , sizeof(_tlv_dh_group_list) + length * sizeof(__u8));
+      tlv_dh_group_list *dhGroupList = malloc(sizeof(tlv_dh_group_list) + length * sizeof(__u8));
+      memcpy(dhGroupList, &data[location] , sizeof(tlv_dh_group_list) + length * sizeof(__u8));
       choose_dh_group(dhGroupList->group_ids,ntohs(dhGroupList->length),
                                               HCNF.dh_group_list, HCNF.dh_group_list_length);
       free(dhGroupList);
@@ -700,7 +701,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
             "accepted, removing old state.\n");
         if (hip_a->peer_dh)
         {
-          DH_free(hip_a->peer_dh);
+          EVP_PKEY_free(hip_a->peer_dh);
           hip_a->peer_dh = NULL;
         }
         if (hip_a->dh_secret)
@@ -750,26 +751,22 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       dh_entry = get_dh_entry(g_id, FALSE);
       dh_entry->ref_count++;
       hip_a->dh_group_id = g_id;
-      hip_a->dh = dh_entry->dh;
+      hip_a->evp_dh = dh_entry->evp_dh;
 
       /* compute key from our dh and peer's pub_key and
            * store in dh_secret_key */
-      dh_secret_key = malloc(DH_size(hip_a->dh));
-      if (!dh_secret_key)
-      {
-        log_(WARN, "hip_parse_R1() malloc() error");
-        return(-1);
-      }
-      memset(dh_secret_key, 0, DH_size(hip_a->dh));
-      len = DH_compute_key(dh_secret_key,
-                           hip_a->peer_dh->pub_key,
-                           hip_a->dh);
-      logdh(hip_a->dh);
-      if (len != DH_size(hip_a->dh))
-      {
-        log_(NORM, "Warning: secret key len = %d,",len);
-        log_(NORM, " expected %d\n",DH_size(hip_a->dh));
-      }
+
+      logdh(hip_a->evp_dh);
+
+
+      EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(hip_a->evp_dh, NULL);
+      EVP_PKEY_derive_init(ctx);
+      EVP_PKEY_derive_set_peer(ctx,hip_a->peer_dh);
+      log_(NORM, "before buffer size !!!!!!!!!!!!!!!!!!!!!!!!!!!!1.\n");
+      EVP_PKEY_derive(ctx, NULL, &hip_a->dh_secret_len);
+      log_(NORM, "size of buffer: %d\n");
+      dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
+      EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
       set_secret_key(dh_secret_key, hip_a);
       /* Do not free(dh_secret_key), which is now
            * dh->dh_secret  */
@@ -892,8 +889,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       ;
     }
     else if(type == PARAM_DH_GROUP_LIST){
-      _tlv_dh_group_list *dhGroupList = malloc(sizeof(_tlv_dh_group_list) + length * sizeof(__u8));
-      memcpy(dhGroupList, &data[location] , sizeof(_tlv_dh_group_list) + length * sizeof(__u8));
+      tlv_dh_group_list *dhGroupList = malloc(sizeof(tlv_dh_group_list) + length * sizeof(__u8));
+      memcpy(dhGroupList, &data[location] , sizeof(tlv_dh_group_list) + length * sizeof(__u8));
 
       choose_dh_group(HCNF.dh_group_list, HCNF.dh_group_list_length,
                                               dhGroupList->group_ids, ntohs(dhGroupList->length));
@@ -962,7 +959,7 @@ int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
     return(-1);
   }
   /* Set ip, hit, size, hi_t of peer_hi */
-  if (hip_a->dh == NULL)
+  if (hip_a->evp_dh == NULL)
   {
     log_(WARN, "Error: after parsing R1, DH is null.\n");
   }
@@ -1164,7 +1161,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
         return(-1);
       }
       hip_a->dh_group_id = dh_entry->group_id;
-      hip_a->dh = dh_entry->dh;
+      hip_a->evp_dh = dh_entry->evp_dh;
       dh_entry->ref_count++;
       dh_entry->is_current = FALSE;               /* mark the entry so it
                                                        *  will not be used again
@@ -1203,21 +1200,12 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
       }
       /* compute key from our dh and peer's pub_key and
            * store in dh_secret_key */
-      dh_secret_key = malloc(DH_size(hip_a->dh));
-      if (!dh_secret_key)
-      {
-        log_(WARN, "hip_parse_I2() malloc() error");
-        return(-1);
-      }
-      memset(dh_secret_key, 0, DH_size(hip_a->dh));
-      len = DH_compute_key(dh_secret_key,
-                           hip_a->peer_dh->pub_key,
-                           hip_a->dh);
-      if (len != DH_size(hip_a->dh))
-      {
-        log_(NORM,"Warning: secret key len = %d,", len);
-        log_(NORM,"expected %d\n", DH_size(hip_a->dh));
-      }
+      EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(hip_a->evp_dh, NULL);
+      EVP_PKEY_derive_init(ctx);
+      EVP_PKEY_derive_set_peer(ctx,hip_a->peer_dh);
+      EVP_PKEY_derive(ctx, NULL, &hip_a -> dh_secret_len);
+      dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
+      EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
       set_secret_key(dh_secret_key, hip_a);
       got_dh = 1;
       /* Do not free(dh_secret_key), which is now
@@ -2346,7 +2334,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
         }
       }
       /* Save the DH context in rk->dh for later use */
-      rk->dh = DH_new();
+      rk->dh = EVP_PKEY_new();
       if (handle_dh(NULL, &data[location], &g_id,
                     rk->dh) < 0)
       {
@@ -2658,7 +2646,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
        */
     if (hip_a->peer_rekey->dh)
     {
-      DH_free(hip_a->peer_rekey->dh);
+      EVP_PKEY_free(hip_a->peer_rekey->dh);
     }
     memcpy(hip_a->peer_rekey, &rk, sizeof(struct rekey_info));
   }
@@ -3100,8 +3088,8 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
  */
 int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 {
-  int len, keymat_index, err;
-  unsigned char *dh_secret_key;
+  int keymat_index, err;
+  unsigned char *dh_secret_key = NULL;
 
   /*
    * Rekey from section 8.11.3
@@ -3124,9 +3112,9 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 
     if (hip_a->rekey->dh)
     {
-      unuse_dh_entry(hip_a->dh);
+      unuse_dh_entry(hip_a->evp_dh);
       hip_a->dh_group_id = hip_a->rekey->dh_group_id;
-      hip_a->dh  = hip_a->rekey->dh;
+      hip_a->evp_dh  = hip_a->rekey->dh;
       hip_a->rekey->dh = NULL;               /* moved to hip_a->dh */
     }
     if (hip_a->peer_rekey->dh)
@@ -3139,21 +3127,19 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
        * compute a new secret key from our dh and peer's pub_key
        * and recompute the keymat
        */
-    dh_secret_key = malloc(DH_size(hip_a->dh));
     if (!dh_secret_key)
     {
       log_(WARN, "hip_finish_rekey() malloc() error");
       return(-1);
     }
-    memset(dh_secret_key, 0, DH_size(hip_a->dh));
-    len = DH_compute_key(dh_secret_key,
-                         hip_a->peer_dh->pub_key,
-                         hip_a->dh);
-    if (len != DH_size(hip_a->dh))
-    {
-      log_(WARN, "Warning: secret key len = %d, ", len);
-      log_(NORM, "expected %d\n", DH_size(hip_a->dh));
-    }
+
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(hip_a->evp_dh, NULL);
+    EVP_PKEY_derive_init(ctx);
+    EVP_PKEY_derive_set_peer(ctx,hip_a->peer_dh);
+    EVP_PKEY_derive(ctx, NULL, &hip_a -> dh_secret_len);
+    dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
+    EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
+
     set_secret_key(dh_secret_key, hip_a);
     keymat_index = 0;
     compute_keymat(hip_a);
@@ -4061,7 +4047,7 @@ int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
  * Parse a Diffie-Hellman parameter, storing its group ID into g and
  * the public key into hip_a->peer_dh or dh
  */
-int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
+int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, EVP_PKEY *evp_dh)
 {
   __u8 g_id;
   int len;
@@ -4106,29 +4092,22 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
 #endif
 
   /* store the public key in hip_a->peer_dh */
-  if (dh == NULL)
+  if (evp_dh == NULL)
   {
     if (hip_a->peer_dh)
     {
-      DH_free(hip_a->peer_dh);
+      EVP_PKEY_free(hip_a->peer_dh);
     }
-    hip_a->peer_dh = DH_new();
-    hip_a->peer_dh->g = BN_new();
-    BN_set_word(hip_a->peer_dh->g, dhgen[g_id]);
-    hip_a->peer_dh->p = BN_bin2bn(dhprime[g_id],
-                                  dhprime_len[g_id], NULL);
-    hip_a->peer_dh->pub_key = BN_bin2bn(pub_key, len, NULL);
-    /* or return the public key */
+
+    hip_a->peer_dh = d2i_PUBKEY(NULL, (const unsigned char**)&pub_key, len);
+    log_(NORM, "EVP_PKEY type: %d", hip_a->peer_dh->type);
   }
   else
   {
-    dh->g = BN_new();
-    BN_set_word(dh->g, dhgen[g_id]);
-    dh->p = BN_bin2bn(dhprime[g_id], dhprime_len[g_id], NULL);
-    dh->pub_key = BN_bin2bn(pub_key, len, NULL);
+    evp_dh = d2i_PUBKEY(NULL, (const unsigned char**)&pub_key, len);
   }
-
-  free(pub_key);
+  //TODO: fix free problem
+  //free(pub_key);
   return(0);
 }
 

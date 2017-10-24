@@ -289,7 +289,7 @@ struct rekey_info {
   __u16 keymat_index;           /* keymat index			*/
   __u8 need_ack;       /* set to FALSE when update_id has been ACKed */
   __u8 dh_group_id;             /* new DH group given by peer	*/
-  DH *dh;                       /* new DH given by the peer	*/
+  EVP_PKEY *dh;                       /* new DH given by the peer	*/
   struct timeval rk_time;       /* creation time, so struct can be freed */
 };
 
@@ -363,9 +363,10 @@ typedef struct _hip_assoc {
   __u16 esp_transform;
   __u16 available_transforms;       /* bit mask used to flag available xfrms */
   __u8 dh_group_id;
-  DH *dh;
-  DH *peer_dh;          /* needed for rekeying */
+  EVP_PKEY *evp_dh;
+  EVP_PKEY *peer_dh;          /* needed for rekeying */
   __u8 *dh_secret;       /* without packing, these cause memset segfaults! */
+  size_t dh_secret_len;
   __u16 keymat_index;
   __u16 mr_keymat_index;
   __u8 keymat[KEYMAT_SIZE];
@@ -510,7 +511,7 @@ typedef struct _dh_cache_entry
 {
   struct _dh_cache_entry *next;         /* the cache is a linked-list   */
   __u8 group_id;                        /* can have various group_ids   */
-  DH *dh;                               /* the Diffie-Hellman context	*/
+  EVP_PKEY *evp_dh;                               /* the Diffie-Hellman context	*/
   __u8 is_current;                      /* if this is the latest DH context
                                          *  for this group_id, then TRUE */
   int ref_count;        /* number of hip_assoc that point to this entry */
@@ -592,7 +593,7 @@ typedef	struct	_tlv_dh_group_list
     __u16	type;
     __u16	length;
     __u8	group_ids[];
-} _tlv_dh_group_list;
+} tlv_dh_group_list;
 
 typedef struct _tlv_diffie_hellman
 {

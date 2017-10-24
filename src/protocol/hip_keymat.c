@@ -60,7 +60,6 @@
  */
 int set_secret_key(unsigned char *key, hip_assoc *hip_a)
 {
-  int keylen;
 
   if (NULL == key)
     {
@@ -68,7 +67,6 @@ int set_secret_key(unsigned char *key, hip_assoc *hip_a)
       return(-1);
     }
 
-  keylen = DH_size(hip_a->dh);
   if (hip_a->dh_secret)
     {
       free(hip_a->dh_secret);
@@ -77,11 +75,11 @@ int set_secret_key(unsigned char *key, hip_assoc *hip_a)
 
 #ifndef HIP_VPLS
   log_(NORM, "************\nDH secret key set to:\n0x");
-  print_hex(hip_a->dh_secret, keylen);
+  print_hex(hip_a->dh_secret, hip_a -> dh_secret_len);
   log_(NORM, "\n***********\n");
 #endif
 
-  return(keylen);
+  return(hip_a -> dh_secret_len);
 }
 
 /*
@@ -173,7 +171,7 @@ int compute_keymat(hip_assoc *hip_a)
   result = BN_ucmp(hit1, hit2);
 
   /* Kij */
-  dh_secret_len = DH_size(hip_a->dh);
+  dh_secret_len = (hip_a -> dh_secret_len);
   hashdata_len = dh_secret_len + (2 * HIT_SIZE) + (2 * sizeof(__u64)) + 1;
   hashdata = malloc(hashdata_len);
   memcpy(hashdata, hip_a->dh_secret, dh_secret_len);
