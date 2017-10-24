@@ -1971,15 +1971,14 @@ int hip_check_bind(struct sockaddr *src, int num_attempts)
 
 
 int build_tlv_dh_group_list ( __u8 *data ){
-  int dh_group_size = HCNF.dh_group_list_length * sizeof(__u8);
-  tlv_dh_group_list *dhGroupList =  malloc(sizeof(tlv_dh_group_list) + dh_group_size);
-  memcpy(dhGroupList -> group_ids, HCNF.dh_group_list, dh_group_size);
+  int len = HCNF.dh_group_list_length * sizeof(__u8);
+  tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) data ;
+  memcpy(dhGroupList -> group_ids, HCNF.dh_group_list, len);
   dhGroupList -> type =  htons(PARAM_DH_GROUP_LIST);
   dhGroupList -> length = htons((__u16) HCNF.dh_group_list_length);
 
-  int len = sizeof(dhGroupList);
-  memcpy(data, dhGroupList, len);
-  free(dhGroupList);
+  log_(NORMT, "size tlv_head: %d.\n", sizeof(tlv_head));
+  len += 4; /*size of header*/
   return eight_byte_align(len);
 }
 

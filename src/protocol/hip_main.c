@@ -178,7 +178,7 @@ int main_loop(int argc, char **argv)
    * Set default configuration
    * later modified by command-line parameters or conf file
    */
-  __u8 DEFAULT_DH_GROUP_LIST[] = {DH_MODP_3072, DH_MODP_1536};
+  __u8 DEFAULT_DH_GROUP_LIST[] = {DH_SECP160R1, DH_MODP_1536};
   memset(&HCNF,	0,	sizeof(struct hip_conf));
   HCNF.cookie_difficulty = 10;
   HCNF.cookie_lifetime = 39;       /* 2^(39-32) = 2^7 = 128 seconds */

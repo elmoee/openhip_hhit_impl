@@ -384,15 +384,15 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
   entry->is_current = TRUE;
   entry->ref_count  = 0;
 
-  if(group_id >=6 && group_id <= 9) {
+  if(group_id >=6 && group_id <= 10) {
     EC_GROUP *ec_group;
     EC_KEY   *ec_key = EC_KEY_new();
     ec_group = EC_GROUP_new_by_curve_name(ec_curve_nid[group_id]);
     EC_KEY_set_group(ec_key, ec_group);
     if ( EC_KEY_generate_key(ec_key) != 1)
     {
-      log_(ERR, "DH key generation failed.\n");
-      log_(NORMT, "DH key generation failed.\n");
+      log_(ERR, "ECDH key generation failed.\n");
+      log_(NORMT, "ECDH key generation failed.\n");
       exit(1);
     }
 
