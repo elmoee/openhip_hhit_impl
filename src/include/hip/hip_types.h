@@ -592,7 +592,7 @@ typedef	struct	_tlv_dh_group_list
 {
     __u16	type;
     __u16	length;
-    __u8	group_ids[];
+    __u8	group_ids;
 } tlv_dh_group_list;
 
 typedef struct _tlv_diffie_hellman
@@ -916,9 +916,7 @@ struct hip_conf {
   char conf_filename[255];
   char my_hi_filename[255];
   char known_hi_filename[255];
-  int dh_group_list_length;
-  __u8 choosen_dh_group;
-  __u8 *dh_group_list;
+  __u8 dh_group_list[DH_MAX];
 };
 
 #endif /* _HIP_TYPES_H_*/

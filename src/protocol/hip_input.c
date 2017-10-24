@@ -353,11 +353,10 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
       }
     }
     else if (type == PARAM_DH_GROUP_LIST){
-      tlv_dh_group_list *dhGroupList = malloc(sizeof(tlv_dh_group_list) + length * sizeof(__u8));
-      memcpy(dhGroupList, &data[location] , sizeof(tlv_dh_group_list) + length * sizeof(__u8));
-      choose_dh_group(dhGroupList->group_ids,ntohs(dhGroupList->length),
-                                              HCNF.dh_group_list, HCNF.dh_group_list_length);
-      free(dhGroupList);
+
+      tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
+      choose_dh_group(&dhGroupList->group_ids,ntohs(dhGroupList->length),
+                                              HCNF.dh_group_list, DH_MAX);
     }
     else
     {
@@ -892,8 +891,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       tlv_dh_group_list *dhGroupList = malloc(sizeof(tlv_dh_group_list) + length * sizeof(__u8));
       memcpy(dhGroupList, &data[location] , sizeof(tlv_dh_group_list) + length * sizeof(__u8));
 
-      choose_dh_group(HCNF.dh_group_list, HCNF.dh_group_list_length,
-                                              dhGroupList->group_ids, ntohs(dhGroupList->length));
+      choose_dh_group(HCNF.dh_group_list, DH_MAX,
+                                              &dhGroupList->group_ids, ntohs(dhGroupList->length));
       free(dhGroupList);
     }
     else
@@ -1114,33 +1113,33 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
       j = compute_R1_cache_index(&hiph->hit_sndr, FALSE);
       /* locate cookie using current random number */
       if ((validate_solution(
-          my_host_id->r1_cache[HCNF.choosen_dh_group][i].current_puzzle,
+          my_host_id->r1_cache[HCNF.dh_group][i].current_puzzle,
           &cookie,
           &hiph->hit_sndr, &hiph->hit_rcvr,
           solution) == 0) ||
           (validate_solution(
-              my_host_id->r1_cache[HCNF.choosen_dh_group][i].previous_puzzle,
+              my_host_id->r1_cache[HCNF.dh_group][i].previous_puzzle,
               &cookie,
               &hiph->hit_sndr, &hiph->hit_rcvr,
               solution) == 0))
       {
-        dh_entry = my_host_id->r1_cache[HCNF.choosen_dh_group][i].dh_entry;
+        dh_entry = my_host_id->r1_cache[HCNF.dh_group][i].dh_entry;
         /* locate cookie using previous random number */
       }
       else if ((validate_solution(
-          my_host_id->r1_cache[HCNF.choosen_dh_group][j].
+          my_host_id->r1_cache[HCNF.dh_group][j].
               current_puzzle,
           &cookie,
           &hiph->hit_sndr, &hiph->hit_rcvr,
           solution) == 0) ||
                (validate_solution(
-                   my_host_id->r1_cache[HCNF.choosen_dh_group][j].
+                   my_host_id->r1_cache[HCNF.dh_group][j].
                        previous_puzzle,
                    &cookie,
                    &hiph->hit_sndr, &hiph->hit_rcvr,
                    solution) == 0))
       {
-        dh_entry = my_host_id->r1_cache[HCNF.choosen_dh_group][j].dh_entry;
+        dh_entry = my_host_id->r1_cache[HCNF.dh_group][j].dh_entry;
       }
       else
       {
@@ -5236,15 +5235,15 @@ void choose_dh_group (__u8 initiator_group_list[],int initiator_group_list_lengt
   }
 
   for(int i = 0 ; i < responder_group_list_length; ++i){
-    if(initiator_array[responder_group_list[i]]){
-      HCNF.choosen_dh_group = responder_group_list[i];
+    if(initiator_array[responder_group_list[i]] && responder_group_list[i] > 0){
+      HCNF.dh_group = responder_group_list[i];
       match = true;
       break;
     }
   }
 
   if(match == false){
-    HCNF.choosen_dh_group = responder_group_list[0];
+    HCNF.dh_group = responder_group_list[0];
   }
-  HCNF.choosen_dh_group = responder_group_list[0];
+  HCNF.dh_group = responder_group_list[0];
 }

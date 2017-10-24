@@ -116,7 +116,7 @@ extern void del_divert_rule(int);
  */
 int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 {
-  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac) + sizeof(tlv_dh_group_list) + HCNF.dh_group_list_length*sizeof(__u8)];
+  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac) + sizeof(tlv_dh_group_list) + DH_MAX];
   struct sockaddr *src, *dst;
   hiphdr *hiph;
   int location = 0, do_retrans;
@@ -255,7 +255,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 
   /* make a copy of a pre-computed R1 from the cache */
   i = compute_R1_cache_index(hiti, TRUE);
-  r1_entry = &hi->r1_cache[HCNF.choosen_dh_group][i];
+  r1_entry = &hi->r1_cache[HCNF.dh_group][i];
   total_len = r1_entry->len;
   log_(NORM,"Using premade R1 from %s cache slot %d.\n", hi->name, i);
 
@@ -1971,13 +1971,23 @@ int hip_check_bind(struct sockaddr *src, int num_attempts)
 
 
 int build_tlv_dh_group_list ( __u8 *data ){
-  int len = HCNF.dh_group_list_length * sizeof(__u8);
+  int i, len = 0;
   tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) data ;
-  memcpy(dhGroupList -> group_ids, HCNF.dh_group_list, len);
   dhGroupList -> type =  htons(PARAM_DH_GROUP_LIST);
-  dhGroupList -> length = htons((__u16) HCNF.dh_group_list_length);
+  __u8 *group_ids = &dhGroupList->group_ids;
+  __u8 current_group_id;
 
-  log_(NORMT, "size tlv_head: %d.\n", sizeof(tlv_head));
+  for (i = 0; (i < DH_MAX); i++)
+  {
+    current_group_id = HCNF.dh_group_list[i];
+    if(current_group_id > 0){
+      len++;
+      *group_ids = current_group_id;
+      group_ids++;
+    }
+  }
+  dhGroupList -> length = htons((__u16) len);
+
   len += 4; /*size of header*/
   return eight_byte_align(len);
 }

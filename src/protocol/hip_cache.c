@@ -99,8 +99,10 @@ void init_all_R1_caches()
   /* initialize the cache for every one of our HIs */
   for (h = my_hi_head; h; h = h->next)
     {
-      for(int i = 0; i < HCNF.dh_group_list_length; ++i){
-        init_R1_cache(h, HCNF.dh_group_list[i]);
+      for(int i = 0; (i < DH_MAX); i++){
+        if(HCNF.dh_group_list[i] > 0){
+          init_R1_cache(h, HCNF.dh_group_list[i]);
+        }
       }
 
     }
@@ -295,7 +297,7 @@ int compute_R1_cache_index(hip_hit *hiti, __u8 current)
 
 int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry)
 {
-  int i, len, num_hip_transforms = 0, num_esp_transforms = 0, hi_len = 0;
+  int i, len, num_hip_transforms = 0, num_esp_transforms = 0, num_group_ids = 0, hi_len = 0;
 
   /* count transforms */
   for (i = 0; i < SUITE_ID_MAX; i++)
@@ -310,15 +312,22 @@ int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry)
         }
     }
 
+  /* count group_ids in dh_group_list */
+
+  for(int i = 0; i < DH_MAX ; i++){
+    if (HCNF.dh_group_list[i] > 0){
+      num_group_ids++;
+    }
+  }
+
   hi_len = build_tlv_hostid_len(hi, HCNF.send_hi_name);
   int dh_public_len = i2d_PUBKEY(dh_entry->evp_dh, NULL);
-  int dh_group_list_len = sizeof(tlv_dh_group_list) + HCNF.dh_group_list_length*sizeof(__u8);
 
   len =   sizeof(hiphdr) + sizeof(tlv_esp_info) + 2 *
         sizeof(tlv_locator) +
         sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) +
         sizeof(tlv_diffie_hellman) + dh_public_len +
-        dh_group_list_len +
+        sizeof(tlv_dh_group_list) + num_group_ids +
         eight_byte_align(sizeof(tlv_hip_transform) - 2 +
                          2 * num_hip_transforms) +
         eight_byte_align(sizeof(tlv_esp_transform) - 2 +

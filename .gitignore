@@ -1,6 +1,10 @@
 
 # Created by https://www.gitignore.io/api/c,clion,visualstudiocode
+src/hip/*
+src/hip/
 
+src/hitgen
+src/hitgen/*
 ### C ###
 # Prerequisites
 *.d
