@@ -184,6 +184,7 @@ int save_identities_file(int);
 int read_conf_file(char *);
 int read_reg_file(void);
 __u16 conf_transforms_to_mask();
+__u16 conf_dh_group_ids_to_mask(__u8* dh_group_list, int length);
 hi_node *create_new_hi_node();
 void append_hi_node(hi_node **head, hi_node *append);
 int add_peer_hit(hip_hit peer_hit, struct sockaddr *peer_addr);

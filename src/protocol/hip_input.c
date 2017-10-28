@@ -120,8 +120,7 @@ int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime);
 int delete_reg_info(struct reg_entry *regs, __u8 type);
 int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
                  __u8* address);
-void choose_dh_group (__u8 initiator_group_list[],int initiator_group_list_length
-    ,__u8 responder_group_list[], int responder_group_list_length );
+int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder);
 
 
 /*
@@ -355,8 +354,17 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
     else if (type == PARAM_DH_GROUP_LIST){
 
       tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
-      choose_dh_group(&dhGroupList->group_ids,ntohs(dhGroupList->length),
-                                              HCNF.dh_group_list, DH_MAX);
+
+      if ((handle_dh_groups(&dhGroupList->group_ids, ntohs(dhGroupList->length), false)) < 0)
+      {
+        hip_send_notify(
+            hip_a,
+            NOTIFY_NO_DH_PROPOSAL_CHOSEN,
+            NULL,
+            0);
+        return(-1);
+      }
+
     }
     else
     {
@@ -761,9 +769,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(hip_a->evp_dh, NULL);
       EVP_PKEY_derive_init(ctx);
       EVP_PKEY_derive_set_peer(ctx,hip_a->peer_dh);
-      log_(NORM, "before buffer size !!!!!!!!!!!!!!!!!!!!!!!!!!!!1.\n");
       EVP_PKEY_derive(ctx, NULL, &hip_a->dh_secret_len);
-      log_(NORM, "size of buffer: %d\n");
       dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
       EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
       set_secret_key(dh_secret_key, hip_a);
@@ -891,8 +897,15 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       tlv_dh_group_list *dhGroupList = malloc(sizeof(tlv_dh_group_list) + length * sizeof(__u8));
       memcpy(dhGroupList, &data[location] , sizeof(tlv_dh_group_list) + length * sizeof(__u8));
 
-      choose_dh_group(HCNF.dh_group_list, DH_MAX,
-                                              &dhGroupList->group_ids, ntohs(dhGroupList->length));
+      if ((handle_dh_groups(&dhGroupList->group_ids, ntohs(dhGroupList->length), true)) < 0)
+      {
+        hip_send_notify(
+            hip_a,
+            NOTIFY_NO_DH_PROPOSAL_CHOSEN,
+            NULL,
+            0);
+        return(-1);
+      }
       free(dhGroupList);
     }
     else
@@ -5225,25 +5238,54 @@ int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
   return(0);
 }
 
-void choose_dh_group (__u8 initiator_group_list[],int initiator_group_list_length
-    ,__u8 responder_group_list[], int responder_group_list_length ){
-  bool initiator_array[16] = {false};
-  bool match = false;
+int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
+  __u8 *dh_group_packet;
+  __u8 dh_group_id;
+  __u16 available_group_id;
 
-  for(int j = 0; j < initiator_group_list_length;++j){
-    initiator_array[initiator_group_list[j]] = true;
+
+  if(is_responder){
+    dh_group_packet = HCNF.dh_group_list;
+    available_group_id = conf_dh_group_ids_to_mask(dh_group_ids,length);
+    length = DH_MAX;
+  } else{
+
+    dh_group_packet =  dh_group_ids;
+    available_group_id = conf_dh_group_ids_to_mask(HCNF.dh_group_list,DH_MAX);
   }
 
-  for(int i = 0 ; i < responder_group_list_length; ++i){
-    if(initiator_array[responder_group_list[i]] && responder_group_list[i] > 0){
-      HCNF.dh_group = responder_group_list[i];
-      match = true;
+  HCNF.dh_group = 0;
+  if (length >= DH_MAX)
+  {
+    log_(WARN, "Warning: There are %d dh group ids present but the "
+             "maximum number is %d.\n",
+         length, DH_MAX - 1);
+    /* continue to read the group ids... */
+  }
+
+  for (int i = 0; (i < length); dh_group_packet++,
+      i++)
+  {
+    dh_group_id = *dh_group_packet;
+    if ((dh_group_id <= DH_RESERVED) ||
+        (dh_group_id >= DH_MAX))
+    {
+      log_(WARN, "Ignoring invalid DH groups (%d).\n",
+           dh_group_id);
+      continue;
+    }
+    if ((available_group_id >> dh_group_id) & 0x1)
+    {
+      HCNF.dh_group = dh_group_id;
       break;
     }
   }
-
-  if(match == false){
-    HCNF.dh_group = responder_group_list[0];
+  if (HCNF.dh_group == 0)
+  {
+    log_(
+        WARN,
+        "Couldn't find a suitable DH group.  This error could indicate that hip.conf was not successfully loaded.\n");
+    return(-1);
   }
-  HCNF.dh_group = responder_group_list[0];
+  return(0);
 }

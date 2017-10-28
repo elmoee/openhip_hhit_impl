@@ -187,6 +187,26 @@ int add_addresses_from_dns(char *name, hi_node *hi)
 }
 
 #endif /* HITGEN */
+__u16 conf_dh_group_ids_to_mask(__u8* dh_group_list, int length)
+{
+  int i;
+  __u16 group_id, mask = 0;
+
+  for (i = 0; i < length; i++, dh_group_list++)
+  {
+    group_id = *dh_group_list;
+    if (!group_id)
+    {
+      break;
+    }
+    if ((group_id >= DH_RESERVED) && (group_id < DH_MAX)) {
+      mask |= (1 << group_id);
+    }
+  }
+
+  return(mask);
+}
+
 
 /*
  * conf_transforms_to_mask()
