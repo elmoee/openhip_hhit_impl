@@ -288,7 +288,7 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index)
         case GL_HIP_ENCRYPTION_KEY:             /* ENCRYPTED payload keys */
         case LG_HIP_ENCRYPTION_KEY:
           key_type = hip_a->hip_transform;
-          len = enc_key_len(key_type);
+          len = enc_key_len_hip_cipher(key_type);
           break;
         case GL_HIP_INTEGRITY_KEY:              /* HMAC keys */
         case LG_HIP_INTEGRITY_KEY:
@@ -411,19 +411,30 @@ int enc_key_len(int suite_id)
   return(0);
 }
 
-int enc_iv_len(int suite_id)
+int enc_key_len_hip_cipher(int hip_cipher_id)
 {
-  switch (suite_id)
+  switch (hip_cipher_id)
+  {
+    case HIP_CIPHER_AES128_CBC:
+      return(KEY_LEN_AES128);
+    case HIP_CIPHER_AES256_CBC:
+      return(KEY_LEN_AES256);
+    case HIP_CIPHER_NULL_ENCRYPT:
+      return(KEY_LEN_NULL);
+    default:
+      break;
+  }
+  return(0);
+}
+
+int enc_iv_len(int hip_cipher_id)
+{
+  switch (hip_cipher_id)
     {
-    case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
+    case HIP_CIPHER_AES128_CBC:
+    case HIP_CIPHER_AES256_CBC:
       return(16);               /* AES uses 128-bit IV */
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_MD5:
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-      return(8);                /* 64-bit IV */
-    case ESP_NULL_HMAC_SHA1:
-    case ESP_NULL_HMAC_MD5:
+    case HIP_CIPHER_NULL_ENCRYPT:
       return(0);
     default:
       break;

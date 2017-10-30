@@ -84,6 +84,7 @@
 int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh_group_list ( __u8 *data );
 int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug);
+int build_tlv_hip_cipher(__u8 *data, __u16 *transforms, __u16 single);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
@@ -395,9 +396,8 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   hiph->hdr_len = (location / 8) - 1;
 
   /* HIP transform */
-  location += build_tlv_transform(&data[location],
-                                  PARAM_HIP_TRANSFORM,
-                                  HCNF.hip_transforms,
+  location += build_tlv_hip_cipher(&data[location],
+                                  HCNF.hip_ciphers,
                                   0);
 
   /* host_id */
@@ -567,10 +567,9 @@ int hip_send_I2(hip_assoc *hip_a)
                            hip_a->evp_dh, OPT.debug);
 
   /* hip transform */
-  location += build_tlv_transform(&buff[location],
-                                  PARAM_HIP_TRANSFORM,
+  location += build_tlv_hip_cipher(&buff[location],
                                   zero16,
-                                  hip_a->hip_transform);
+                                  hip_a->hip_cipher);
 
   /* encrypted(host_id) */
   enc = (tlv_encrypted*) &buff[location];
@@ -620,7 +619,7 @@ int hip_send_I2(hip_assoc *hip_a)
     case ESP_AES256_CBC_HMAC_SHA1:
       /* do AES CBC encryption */
       key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len(hip_a->hip_transform);
+      len = enc_key_len_hip_cipher(hip_a->hip_transform);
       log_(NORM, "AES encryption key: 0x");
       print_hex(key, len);
       log_(NORM, "\n");
@@ -696,7 +695,7 @@ int hip_send_I2(hip_assoc *hip_a)
       break;
     case ESP_BLOWFISH_CBC_HMAC_SHA1:
       key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len(hip_a->hip_transform);
+      len = enc_key_len_hip_cipher(hip_a->hip_transform);
       log_(NORM, "BLOWFISH encryption key: 0x");
       print_hex(key, len);
       log_(NORM, "\n");
@@ -2049,6 +2048,38 @@ int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
   //free(p);
 
   len += 5;       /* tlv hdr + group_id + pub */
+  len = eight_byte_align(len);
+  return(len);
+}
+
+int build_tlv_hip_cipher(__u8 *data, __u16 *transforms, __u16 single)
+{
+  int i, len = 0;
+  tlv_head *tlv;
+  tlv_hip_transform *hip_trans;
+  __u16 *transform_id;
+
+  tlv = (tlv_head*) data;
+  len += 4;       /* advance for type, length */
+  hip_trans = (tlv_hip_transform*) data;
+  transform_id = &hip_trans->transform_id;
+  hip_trans->type = htons((__u16)PARAM_HIP_TRANSFORM);
+
+  if (single > 0)
+  {
+    *transform_id = htons(single);
+    len += 2;
+  }
+  else
+  {
+    for (i = 0; (i < HIP_CIPHER_MAX) && (transforms[i] > 0); i++)
+    {
+      len += 2;
+      *transform_id = htons(transforms[i]);
+      transform_id++;
+    }
+  }
+  tlv->length = htons((__u16)(len - 4));
   len = eight_byte_align(len);
   return(len);
 }

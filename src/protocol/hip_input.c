@@ -92,6 +92,7 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
                   __u8 *key, int type);
 hi_node *check_if_my_hit(hip_hit *hit);
 int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp);
+int handle_hip_cipher(hip_assoc *hip_a, __u16 *transforms, int length);
 int handle_cert(hip_assoc *hip_a, const __u8 *data);
 int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, EVP_PKEY *evp_dh);
 int handle_acks(hip_assoc *hip_a, tlv_ack *ack);
@@ -779,7 +780,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
     else if (type == PARAM_HIP_TRANSFORM)
     {
       p = &((tlv_hip_transform*)tlv)->transform_id;
-      if ((handle_transforms(hip_a, p, length, FALSE)) < 0)
+      if ((handle_hip_cipher(hip_a, p, length)) < 0)
       {
         hip_send_notify(hip_a,
                         NOTIFY_NO_HIP_PROPOSAL_CHOSEN,
@@ -1048,10 +1049,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   unsigned char *dh_secret_key;
   dh_cache_entry *dh_entry = NULL;
   unsigned char *key, *enc_data = NULL, *unenc_data = NULL;
-  des_key_schedule ks1, ks2, ks3;
-  BF_KEY bfkey;
   AES_KEY aes_key;
-  u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
   unsigned char cbc_iv[16];
   int got_dh = 0, comp_keys = 0, status;
   __u8 valid_cert = FALSE;
@@ -1226,7 +1224,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
     else if (type == PARAM_HIP_TRANSFORM)
     {
       p = &((tlv_hip_transform*)tlv)->transform_id;
-      if ((handle_transforms(hip_a, p, length, FALSE)) < 0)
+      if ((handle_hip_cipher(hip_a, p, length)) < 0)
       {
         hip_send_notify(
             hip_a,
@@ -1321,13 +1319,13 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
         memcpy(cbc_iv, ((tlv_encrypted*)tlv)->iv,
                iv_len);
         key = get_key(hip_a, HIP_ENCRYPTION, TRUE);
-        key_len = enc_key_len(hip_a->hip_transform);
+        key_len = enc_key_len_hip_cipher(hip_a->hip_transform);
 
         /* prepare keys and decrypt based on cipher */
         switch (hip_a->hip_transform)
         {
-          case ESP_AES128_CBC_HMAC_SHA1:
-          case ESP_AES256_CBC_HMAC_SHA1:
+          case HIP_CIPHER_AES128_CBC:
+          case HIP_CIPHER_AES256_CBC:
             log_(NORM, "AES decryption key: 0x");
             print_hex(key, key_len);
             log_(NORM, "\n");
@@ -1349,73 +1347,6 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                             &aes_key,
                             cbc_iv,
                             AES_DECRYPT);
-            break;
-          case ESP_3DES_CBC_HMAC_SHA1:
-          case ESP_3DES_CBC_HMAC_MD5:
-            memcpy(&secret_key1, key, key_len / 3);
-            memcpy(&secret_key2,
-                   key + 8,
-                   key_len / 3);
-            memcpy(&secret_key3,
-                   key + 16,
-                   key_len / 3);
-            des_set_odd_parity((des_cblock*)
-                                   (&secret_key1));
-            des_set_odd_parity((des_cblock*)
-                                   (&secret_key2));
-            des_set_odd_parity((des_cblock*)
-                                   (&secret_key3));
-            log_(NORM, "decryption key: 0x");
-            print_hex(secret_key1, key_len);
-            log_(NORM, "-");
-            print_hex(secret_key2, key_len);
-            log_(NORM, "-");
-            print_hex(secret_key3, key_len);
-            log_(NORM, "\n");
-
-            if (des_set_key_checked((des_cblock*)
-                                    &secret_key1,
-                                    ks1) ||
-                des_set_key_checked((des_cblock*)
-                                    &secret_key2,
-                                    ks2) ||
-                des_set_key_checked((des_cblock*)
-                                    &secret_key3,
-                                    ks3))
-            {
-              log_(NORM, "Unable to use cal");
-              log_(NORM, "culated DH secret");
-              log_(NORM, " for 3DES key.\n");
-              err = NOTIFY_ENCRYPTION_FAILED;
-              goto I2_ERROR;
-            }
-            log_(NORM, "Decrypting %d bytes ", len);
-            log_(NORM, "using 3-DES.\n");
-            des_ede3_cbc_encrypt(
-                enc_data,
-                unenc_data,
-                len,
-                ks1,
-                ks2,
-                ks3,
-                (des_cblock*)
-                    cbc_iv,
-                DES_DECRYPT);
-            break;
-          case ESP_BLOWFISH_CBC_HMAC_SHA1:
-            log_(NORM, "BLOWFISH decryption key: ");
-            log_(NORM, "0x");
-            print_hex(key, key_len);
-            log_(NORM, "\n");
-            BF_set_key(&bfkey, key_len, key);
-            log_(NORM, "Decrypting %d bytes ", len);
-            log_(NORM, "using BLOWFISH.\n");
-            BF_cbc_encrypt(enc_data,
-                           unenc_data,
-                           len,
-                           &bfkey,
-                           cbc_iv,
-                           BF_DECRYPT);
             break;
           default:
             log_(WARN, "Unsupported transform ");
@@ -3982,6 +3913,60 @@ hi_node *check_if_my_hit(hip_hit *hit)
 
   return(my_host_id);
 }
+
+int handle_hip_cipher(hip_assoc *hip_a, __u16 *transforms, int length)
+{
+  __u16 *transform_id_packet;
+  int transforms_left;
+  __u16 transform_id;
+  __u16 *chosen = &hip_a->hip_cipher;
+  transforms_left = length / sizeof(__u16);
+  transform_id_packet = transforms;
+  *chosen = 0;
+  if (transforms_left >= HIP_CIPHER_MAX)
+  {
+    log_(WARN, "Warning: There are %d transforms present but the "
+           "maximum number is %d.\n",
+         transforms_left, HIP_CIPHER_MAX - 1);
+    /* continue to read the transforms... */
+  }
+
+  for (; (transforms_left > 0); transform_id_packet++,
+    transforms_left--)
+  {
+    transform_id = ntohs(*transform_id_packet);
+
+    if ((transform_id <= RESERVED_1) ||
+        (transform_id >= HIP_CIPHER_MAX))
+    {
+      log_(WARN, "Ignoring invalid transform (%d).\n",
+           transform_id);
+      continue;
+    }
+    if ((hip_a->available_transforms >> transform_id) & 0x1)
+    {
+      *chosen = transform_id;
+      break;
+    }
+  }
+  if (*chosen == 0)
+  {
+    log_(
+      WARN,
+      "Couldn't find a suitable HIP transform.  This error could indicate that hip.conf was not successfully loaded.\n");
+    if (OPT.permissive)             /* AES is mandatory */
+    {
+      log_(WARN, "Continuing using AES.\n");
+      *chosen = HIP_CIPHER_AES128_CBC;
+    }
+    else
+    {
+      return(-1);
+    }
+  }
+  return(0);
+}
+
 
 /*
  * handle_transforms()

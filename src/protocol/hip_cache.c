@@ -369,7 +369,7 @@ void init_dh_cache()
     {
       return;
     }
-  dh_cache = new_dh_cache_entry(HCNF.dh_group); // TODO: remove
+  //dh_cache = new_dh_cache_entry(HCNF.dh_group); // TODO: remove
 }
 
 /*
@@ -420,7 +420,7 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
     /* By not setting dh->priv_key, allow crypto lib to pick at random */
     if ((err = DH_generate_key(dh)) != 1)
     {
-      log_(ERR, "DH key generation failed.\n");
+      log_(ERR, "DH key generation failed %d.\n", group_id);
       log_(NORMT, "DH key generation failed.\n");
       exit(1);
     }
@@ -463,7 +463,14 @@ dh_cache_entry *get_dh_entry(__u8 group_id, int new)
    * so generate a new one */
   entry = new_dh_cache_entry(group_id);
   /* add it to the cache */
-  last->next = entry;
+  if(last == NULL){
+    last = entry;
+  }
+  else{
+    last->next = entry;
+  }
+
+  log_(NORM, "in loop.\n");
   return(entry);
 }
 

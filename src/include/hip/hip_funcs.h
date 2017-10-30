@@ -174,6 +174,7 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index);
 int draw_mr_key(hip_assoc *hip_a, int keymat_index);
 int auth_key_len(int suite_id);
 int enc_key_len(int suite_id);
+int enc_key_len_hip_cipher(int hip_cipher_id);
 int enc_iv_len(int suite_id);
 int transform_to_ealg(int transform);
 int transform_to_aalg(int transform);

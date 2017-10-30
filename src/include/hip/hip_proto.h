@@ -102,7 +102,7 @@ typedef enum {
 #define PARAM_ACK                       449
 #define	PARAM_DH_GROUP_LIST	            511
 #define PARAM_DIFFIE_HELLMAN            513
-#define PARAM_HIP_TRANSFORM             577
+#define PARAM_HIP_TRANSFORM             579
 #define PARAM_ENCRYPTED                 641
 #define PARAM_HOST_ID                   705
 #define PARAM_CERT                      768
@@ -143,8 +143,16 @@ typedef enum {
   ESP_AES256_CBC_HMAC_SHA1,             /* 7 */
   SUITE_ID_MAX,                         /* 8 */
 } SUITE_IDS;
-#define ENCR_NULL(a) ((a == ESP_NULL_HMAC_SHA1) || \
-                      (a == ESP_NULL_HMAC_MD5))
+
+typedef enum {
+  RESERVED_1,                           /* 0 */
+  HIP_CIPHER_NULL_ENCRYPT,              /* 1 */
+  HIP_CIPHER_AES128_CBC,                /* 2 */
+  RESERVED_2,                           /* 3 */
+  HIP_CIPHER_AES256_CBC,                /* 4 */
+  HIP_CIPHER_MAX,                        /* 5 */
+} CIPHER_IDS;
+#define ENCR_NULL(a) (a == HIP_CIPHER_NULL_ENCRYPT)
 /* Supported transforms are compressed into a bitmask... */
 /* Default HIP transforms proposed when none are specified in config */
 #define DEFAULT_HIP_TRANS \

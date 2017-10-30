@@ -359,6 +359,7 @@ typedef struct _hip_assoc {
   struct _tlv_from *from_via;       /* including FROM in I1 or VIA RVS in R1 */
   struct multihoming_info *mh;       /* state for loss multihoming */
   /* Other crypto */
+  __u16 hip_cipher;
   __u16 hip_transform;
   __u16 esp_transform;
   __u16 available_transforms;       /* bit mask used to flag available xfrms */
@@ -881,6 +882,7 @@ struct hip_conf {
                                          * after a successfule ICMP UPDATE */
   __u16 esp_transforms[SUITE_ID_MAX];       /* ESP transforms proposed in R1 */
   __u16 hip_transforms[SUITE_ID_MAX];       /* HIP transforms proposed in R1 */
+  __u16 hip_ciphers[HIP_CIPHER_MAX];
   char *log_filename;                   /* non-default pathname for log	     */
   struct sockaddr_storage dht_server;       /* address+port of DHT server    */
   struct sockaddr_storage dns_server;       /* address of server w/HIP RRs   */
