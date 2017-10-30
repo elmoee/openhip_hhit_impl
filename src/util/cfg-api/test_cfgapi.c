@@ -490,7 +490,7 @@ int main(void)
   for (i = 0; i < 30; i++)
     {
       SHA256_CTX c;
-      unsigned char md[SHA56_DIGEST_LENGTH];
+      unsigned char md[SHA256_DIGEST_LENGTH];
       unsigned char rsa_sig[1024];
       unsigned char data[512];
       unsigned int sig_len;
