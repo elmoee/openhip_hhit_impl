@@ -266,7 +266,7 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index)
       hip_a->keys[i].type = 0;
     }
 
-  log_(NORM, "Using HIP transform of %d", hip_a->hip_transform);
+  log_(NORM, "Using HIP transform of %d", hip_a->hip_cipher);
   if (draw_hip_keys)
     {
       log_(NORM, ".\nDrawing new HIP encryption/integrity keys:\n");
@@ -287,7 +287,7 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index)
         {
         case GL_HIP_ENCRYPTION_KEY:             /* ENCRYPTED payload keys */
         case LG_HIP_ENCRYPTION_KEY:
-          key_type = hip_a->hip_transform;
+          key_type = hip_a->hip_cipher;
           len = enc_key_len_hip_cipher(key_type);
           break;
         case GL_HIP_INTEGRITY_KEY:              /* HMAC keys */

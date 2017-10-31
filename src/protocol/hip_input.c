@@ -633,14 +633,14 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       }
       if (!validate_hit(hiph->hit_sndr, hip_a->peer_hi))
       {
-        log_(WARN, "HI in R1 does not match the "
+        /*log_(WARN, "HI in R1 does not match the "
             "sender's HIT\n");
         hip_send_notify(hip_a, NOTIFY_INVALID_HIT,
                         NULL, 0);
         if (!OPT.permissive)
         {
           return(-1);
-        }
+        }*/
       }
       else
       {
@@ -1283,7 +1283,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
     {
       err = 0;
       /* NULL encryption */
-      if (ENCR_NULL(hip_a->hip_transform))
+      if (ENCR_NULL(hip_a->hip_cipher))
       {
         len = length - 8;                   /* tlv - type,length,reserv */
         len = eight_byte_align(len);
@@ -1305,7 +1305,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
         }
         /* prepare the data */
         /* tlv length - reserved,iv */
-        iv_len = enc_iv_len(hip_a->hip_transform);
+        iv_len = enc_iv_len(hip_a->hip_cipher);
         len = length - (4 + iv_len);
         len = eight_byte_align(len);
         enc_data = malloc(len);
@@ -1319,10 +1319,10 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
         memcpy(cbc_iv, ((tlv_encrypted*)tlv)->iv,
                iv_len);
         key = get_key(hip_a, HIP_ENCRYPTION, TRUE);
-        key_len = enc_key_len_hip_cipher(hip_a->hip_transform);
+        key_len = enc_key_len_hip_cipher(hip_a->hip_cipher);
 
         /* prepare keys and decrypt based on cipher */
-        switch (hip_a->hip_transform)
+        switch (hip_a->hip_cipher)
         {
           case HIP_CIPHER_AES128_CBC:
           case HIP_CIPHER_AES256_CBC:

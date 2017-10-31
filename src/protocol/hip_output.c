@@ -465,10 +465,7 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* encrypted(host_id) */
   __u16 data_len, iv_len;
-  des_key_schedule ks1, ks2, ks3;
-  u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
   unsigned char *key;
-  BF_KEY bfkey;
   AES_KEY aes_key;
   /*
    * initialization vector used as a randomizing block which is
@@ -491,7 +488,7 @@ int hip_send_I2(hip_assoc *hip_a)
   src = HIPA_SRC(hip_a);
   dst = HIPA_DST(hip_a);
 
-  if (!ENCR_NULL(hip_a->hip_transform))
+  if (!ENCR_NULL(hip_a->hip_cipher))
     {
       RAND_bytes(cbc_iv, sizeof(cbc_iv));
     }
@@ -575,7 +572,7 @@ int hip_send_I2(hip_assoc *hip_a)
   enc = (tlv_encrypted*) &buff[location];
   enc->type = htons(PARAM_ENCRYPTED);
   memset(enc->reserved, 0, sizeof(enc->reserved));
-  iv_len = enc_iv_len(hip_a->hip_transform);
+  iv_len = enc_iv_len(hip_a->hip_cipher);
 
   /* inner padding is 8-byte aligned */
   data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
@@ -608,18 +605,17 @@ int hip_send_I2(hip_assoc *hip_a)
          (data_len - hi_location),         /* fill with pad length */
          (data_len - hi_location));
 
-  switch (hip_a->hip_transform)
+  switch (hip_a->hip_cipher)
     {
-    case ESP_NULL_HMAC_SHA1:
-    case ESP_NULL_HMAC_MD5:
+    case HIP_CIPHER_NULL_ENCRYPT:
       /* don't send an IV with NULL encryption, copy data */
       memcpy(enc->iv, unenc_data, data_len);
       break;
-    case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
+    case HIP_CIPHER_AES128_CBC:
+    case HIP_CIPHER_AES256_CBC:
       /* do AES CBC encryption */
       key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len_hip_cipher(hip_a->hip_transform);
+      len = enc_key_len_hip_cipher(hip_a->hip_cipher);
       log_(NORM, "AES encryption key: 0x");
       print_hex(key, len);
       log_(NORM, "\n");
@@ -636,74 +632,6 @@ int hip_send_I2(hip_assoc *hip_a)
       AES_cbc_encrypt(unenc_data, enc_data, data_len, &aes_key,
                       cbc_iv, AES_ENCRYPT);
       memcpy(enc->iv + iv_len, enc_data, data_len);
-      break;
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_MD5:
-      /* do 3DES PCBC encryption */
-      /* Get HIP Initiator key and draw out three keys from that */
-      /* Assumes key is 24 bytes for now */
-      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = 8;
-      if (len < DES_KEY_SZ)
-        {
-          log_(WARN, "short key!");
-        }
-      memcpy(&secret_key1, key, len);
-      memcpy(&secret_key2, key + 8, len);
-      memcpy(&secret_key3, key + 16, len);
-
-      des_set_odd_parity((des_cblock *)&secret_key1);
-      des_set_odd_parity((des_cblock *)&secret_key2);
-      des_set_odd_parity((des_cblock *)&secret_key3);
-      log_(NORM, "3-DES encryption key: 0x");
-      print_hex(secret_key1, len);
-      log_(NORM, "-");
-      print_hex(secret_key2, len);
-      log_(NORM, "-");
-      print_hex(secret_key3, len);
-      log_(NORM, "\n");
-
-      if (((err = des_set_key_checked((
-                                        (des_cblock *)&
-                                        secret_key1),
-                                      ks1)) != 0) ||
-          ((err = des_set_key_checked((
-                                        (des_cblock *)&
-                                        secret_key2),
-                                      ks2)) != 0) ||
-          ((err = des_set_key_checked((
-                                        (des_cblock *)&
-                                        secret_key3),
-                                      ks3)) != 0))
-        {
-          log_(WARN, "Unable to use calculated DH secret for ");
-          log_(NORM, "3DES key (%d)\n", err);
-          free(unenc_data);
-          free(enc_data);
-          return(-1);
-        }
-      log_(NORM, "Encrypting %d bytes using 3-DES.\n", data_len);
-      des_ede3_cbc_encrypt(unenc_data,
-                           enc_data,
-                           data_len,
-                           ks1,
-                           ks2,
-                           ks3,
-                           (des_cblock*)cbc_iv,
-                           DES_ENCRYPT);
-      memcpy(enc->iv + iv_len, enc_data, data_len);
-      break;
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len_hip_cipher(hip_a->hip_transform);
-      log_(NORM, "BLOWFISH encryption key: 0x");
-      print_hex(key, len);
-      log_(NORM, "\n");
-      BF_set_key(&bfkey, len, key);
-      log_(NORM, "Encrypting %d bytes using BLOWFISH.\n", data_len);
-      BF_cbc_encrypt(unenc_data, enc_data, data_len,
-                     &bfkey, cbc_iv, BF_ENCRYPT);
-      memcpy(enc->enc_data, enc_data, data_len);
       break;
     }
   /* this is type + length + reserved + iv + data_len */
