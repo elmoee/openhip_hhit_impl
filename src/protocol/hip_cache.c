@@ -429,7 +429,6 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
   }
 
   gettimeofday(&entry->creation_time, NULL);
-  log_(NORM, " in new_dh_cache_entry. group_id %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", group_id);
   return(entry);
 }
 
@@ -470,7 +469,6 @@ dh_cache_entry *get_dh_entry(__u8 group_id, int new)
     last->next = entry;
   }
 
-  log_(NORM, "in loop.\n");
   return(entry);
 }
 

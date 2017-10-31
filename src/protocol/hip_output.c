@@ -1956,10 +1956,8 @@ int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
       log_(WARN, "malloc error - generating Diffie Hellman\n");
       return(0);
     }
-  log_(NORM, "Length %d.\n", len);
   len = i2d_PUBKEY(evp_dh, &p);
   memcpy(d->pub, bin, len);
-  print_hex(d->pub, len);
 
   d->pub_len = ntohs((__u16)len);
   d->length = htons((__u16)(3 + len));       /* group_id + pub */
@@ -1968,7 +1966,6 @@ int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
   if (D_VERBOSE == debug)
     {
       log_(NORM, "Using DH public value of len %d: 0x", len);
-      print_hex(bin, len);
       log_(NORM, "\n");
     }
 #endif
