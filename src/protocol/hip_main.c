@@ -192,13 +192,15 @@ int main_loop(int argc, char **argv)
   HCNF.dh_group_list[1] = DH_MODP_1536;
   HCNF.hip_ciphers[0] = HIP_CIPHER_AES128_CBC;
   HCNF.hip_ciphers[1] = HIP_CIPHER_AES256_CBC;
+  HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+  HCNF.hit_suite_list[1] = HIT_SUITE_4BIT_ECDSA_SHA384;
   HCNF.dh_lifetime = 900;
   HCNF.r1_lifetime = 300;
   HCNF.msl = 5;
   HCNF.ual = 600;
   HCNF.failure_timeout = (HCNF.max_retries * HCNF.packet_timeout);
   HCNF.icmp_timeout = 0;
-  for (i = 0; i < (SUITE_ID_MAX - 1); i++)
+  for (i = 0; i < (ESP_MAX - 1); i++)
     {
       HCNF.esp_transforms[i] = HCNF.hip_transforms[i] = (__u16)(i + 1);
     }

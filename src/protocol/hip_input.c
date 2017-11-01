@@ -777,9 +777,9 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       /* Do not free(dh_secret_key), which is now
            * dh->dh_secret  */
     }
-    else if (type == PARAM_HIP_TRANSFORM)
+    else if (type == PARAM_HIP_CIPHER)
     {
-      p = &((tlv_hip_transform*)tlv)->transform_id;
+      p = &((tlv_hip_cipher*)tlv)->cipher_id;
       if ((handle_hip_cipher(hip_a, p, length)) < 0)
       {
         hip_send_notify(hip_a,
@@ -787,6 +787,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
                         NULL, 0);
         return(-1);
       }
+      hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
     }
     else if (type == PARAM_ESP_TRANSFORM)
     {
@@ -1221,18 +1222,19 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
       /* Do not free(dh_secret_key), which is now
            * dh->dh_secret  */
     }
-    else if (type == PARAM_HIP_TRANSFORM)
+    else if (type == PARAM_HIP_CIPHER)
     {
-      p = &((tlv_hip_transform*)tlv)->transform_id;
+      p = &((tlv_hip_cipher*)tlv)->cipher_id;
       if ((handle_hip_cipher(hip_a, p, length)) < 0)
       {
         hip_send_notify(
             hip_a,
-            NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN,
+            NOTIFY_INVALID_HIP_CIPHER_CHOSEN,
             NULL,
             0);
         return(-1);
       }
+      hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
       /* Must compute keys here so we can use them below. */
       if (got_dh)
       {
@@ -3544,7 +3546,7 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
     case NOTIFY_NO_HIP_PROPOSAL_CHOSEN:
       log_(NORM, "No acceptable HIP Transform was proposed.\n");
       break;
-    case NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN:
+    case NOTIFY_INVALID_HIP_CIPHER_CHOSEN:
       log_(NORM, "Invalid HIP Transform chosen.\n");
       break;
     case NOTIFY_NO_ESP_PROPOSAL_CHOSEN:
@@ -3936,7 +3938,7 @@ int handle_hip_cipher(hip_assoc *hip_a, __u16 *transforms, int length)
   {
     transform_id = ntohs(*transform_id_packet);
 
-    if ((transform_id <= RESERVED_1) ||
+    if ((transform_id <= HIP_CIPHER_RESERVED) ||
         (transform_id >= HIP_CIPHER_MAX))
     {
       log_(WARN, "Ignoring invalid transform (%d).\n",
@@ -3992,11 +3994,11 @@ int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
   transforms_left = length / sizeof(__u16);
   transform_id_packet = transforms;
   *chosen = 0;
-  if (transforms_left >= SUITE_ID_MAX)
+  if (transforms_left >= ESP_MAX)
   {
     log_(WARN, "Warning: There are %d transforms present but the "
              "maximum number is %d.\n",
-         transforms_left, SUITE_ID_MAX - 1);
+         transforms_left, ESP_MAX - 1);
     /* continue to read the transforms... */
   }
 
@@ -4006,7 +4008,7 @@ int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
     transform_id = ntohs(*transform_id_packet);
 
     if ((transform_id <= RESERVED) ||
-        (transform_id >= SUITE_ID_MAX))
+        (transform_id >= ESP_MAX))
     {
       log_(WARN, "Ignoring invalid transform (%d).\n",
            transform_id);

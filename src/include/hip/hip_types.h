@@ -605,12 +605,19 @@ typedef struct _tlv_diffie_hellman
   __u8 pub[0];       /* variable length */
 } __attribute__ ((packed)) tlv_diffie_hellman;
 
-typedef struct _tlv_hip_transform
+typedef struct _tlv_hip_cipher
 {
   __u16 type;
   __u16 length;
-  __u16 transform_id;
-} tlv_hip_transform;
+  __u16 cipher_id;
+} tlv_hip_cipher;
+
+typedef struct _tlv_hit_suite
+{
+  __u16 type;
+  __u16 length;
+  __u16 hit_suite_id;
+} tlv_hit_suite;
 
 typedef struct _tlv_esp_transform
 {
@@ -880,9 +887,10 @@ struct hip_conf {
   __u32 ual;                            /* seconds until unused SA expires */
   __u32 icmp_timeout;                   /* seconds until again respond to ICMP
                                          * after a successfule ICMP UPDATE */
-  __u16 esp_transforms[SUITE_ID_MAX];       /* ESP transforms proposed in R1 */
-  __u16 hip_transforms[SUITE_ID_MAX];       /* HIP transforms proposed in R1 */
+  __u16 esp_transforms[ESP_MAX];       /* ESP transforms proposed in R1 */
+  __u16 hip_transforms[ESP_MAX];       /* HIP transforms proposed in R1 */
   __u16 hip_ciphers[HIP_CIPHER_MAX];
+  __u16 hit_suite_list[HIT_SUITE_8BIT_MAX];
   char *log_filename;                   /* non-default pathname for log	     */
   struct sockaddr_storage dht_server;       /* address+port of DHT server    */
   struct sockaddr_storage dns_server;       /* address of server w/HIP RRs   */
@@ -919,6 +927,7 @@ struct hip_conf {
   char my_hi_filename[255];
   char known_hi_filename[255];
   __u8 dh_group_list[DH_MAX];
+
 };
 
 #endif /* _HIP_TYPES_H_*/

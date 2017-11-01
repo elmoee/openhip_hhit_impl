@@ -220,7 +220,7 @@ __u16 conf_transforms_to_mask()
   int i;
   __u16 transform, mask = 0;
 
-  for (i = 0; i < SUITE_ID_MAX; i++)
+  for (i = 0; i < ESP_MAX; i++)
     {
       transform = HCNF.hip_transforms[i];
       if (!transform)
@@ -229,7 +229,7 @@ __u16 conf_transforms_to_mask()
         }
       mask |= (1 << transform);
     }
-  for (i = 0; i < SUITE_ID_MAX; i++)
+  for (i = 0; i < ESP_MAX; i++)
     {
       transform = HCNF.esp_transforms[i];
       if (!transform)

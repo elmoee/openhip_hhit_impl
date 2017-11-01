@@ -300,7 +300,7 @@ int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry)
   int i, len, num_hip_transforms = 0, num_esp_transforms = 0, num_group_ids = 0, hi_len = 0;
 
   /* count transforms */
-  for (i = 0; i < SUITE_ID_MAX; i++)
+  for (i = 0; i < ESP_MAX; i++)
     {
       if (HCNF.hip_transforms[i] > 0)
         {
@@ -328,7 +328,7 @@ int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry)
         sizeof(tlv_r1_counter) + sizeof(tlv_puzzle) +
         sizeof(tlv_diffie_hellman) + dh_public_len +
         sizeof(tlv_dh_group_list) + num_group_ids +
-        eight_byte_align(sizeof(tlv_hip_transform) - 2 +
+        eight_byte_align(sizeof(tlv_hip_cipher) - 2 +
                          2 * num_hip_transforms) +
         eight_byte_align(sizeof(tlv_esp_transform) - 2 +
                          2 * num_esp_transforms) +

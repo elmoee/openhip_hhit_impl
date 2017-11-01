@@ -84,7 +84,6 @@
 int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh_group_list ( __u8 *data );
 int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug);
-int build_tlv_hip_cipher(__u8 *data, __u16 *transforms, __u16 single);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
@@ -396,7 +395,8 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   hiph->hdr_len = (location / 8) - 1;
 
   /* HIP transform */
-  location += build_tlv_hip_cipher(&data[location],
+  location += build_tlv_transform(&data[location],
+                                  PARAM_HIP_CIPHER,
                                   HCNF.hip_ciphers,
                                   0);
 
@@ -451,7 +451,7 @@ int hip_send_I2(hip_assoc *hip_a)
   __u8 buff[sizeof(hiphdr)            + sizeof(tlv_esp_info) +
             sizeof(tlv_r1_counter)    +
             sizeof(tlv_solution)      + sizeof(tlv_diffie_hellman) +
-            DH_MAX_LEN                + sizeof(tlv_hip_transform) + 2 +
+            DH_MAX_LEN                + sizeof(tlv_hip_cipher) + 2 +
             sizeof(tlv_esp_transform) + sizeof(tlv_encrypted) +
             sizeof(tlv_host_id)       + 1 + DSA_PRIV +
             3 * (MAX_HI_BITS / 8)         + MAX_HI_NAMESIZE +
@@ -564,7 +564,8 @@ int hip_send_I2(hip_assoc *hip_a)
                            hip_a->evp_dh, OPT.debug);
 
   /* hip transform */
-  location += build_tlv_hip_cipher(&buff[location],
+  location += build_tlv_transform(&buff[location],
+                                  PARAM_HIP_CIPHER,
                                   zero16,
                                   hip_a->hip_cipher);
 
@@ -1977,38 +1978,6 @@ int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
   return(len);
 }
 
-int build_tlv_hip_cipher(__u8 *data, __u16 *transforms, __u16 single)
-{
-  int i, len = 0;
-  tlv_head *tlv;
-  tlv_hip_transform *hip_trans;
-  __u16 *transform_id;
-
-  tlv = (tlv_head*) data;
-  len += 4;       /* advance for type, length */
-  hip_trans = (tlv_hip_transform*) data;
-  transform_id = &hip_trans->transform_id;
-  hip_trans->type = htons((__u16)PARAM_HIP_TRANSFORM);
-
-  if (single > 0)
-  {
-    *transform_id = htons(single);
-    len += 2;
-  }
-  else
-  {
-    for (i = 0; (i < HIP_CIPHER_MAX) && (transforms[i] > 0); i++)
-    {
-      len += 2;
-      *transform_id = htons(transforms[i]);
-      transform_id++;
-    }
-  }
-  tlv->length = htons((__u16)(len - 4));
-  len = eight_byte_align(len);
-  return(len);
-}
-
 /*
  * Returns number of bytes that it advances
  * Transforms is a pointer to an array of transforms to include.
@@ -2018,18 +1987,25 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
 {
   int i, len = 0;
   tlv_head *tlv;
-  tlv_hip_transform *hip_trans;
+  tlv_hip_cipher *hip_cipher;
   tlv_esp_transform *esp_trans;
+  tlv_hit_suite     *hit_suite_trans;
+  __u16 array_max = PARAM_HIP_CIPHER? HIP_CIPHER_MAX :
+                    PARAM_HIP_SUITE_LIST? HIT_SUITE_8BIT_MAX : ESP_MAX;
   __u16 *transform_id;
 
   tlv = (tlv_head*) data;
   tlv->type = htons((__u16)type);
   len += 4;       /* advance for type, length */
-  if (type == PARAM_HIP_TRANSFORM)
+  if (type == PARAM_HIP_CIPHER)
     {
-      hip_trans = (tlv_hip_transform*) data;
-      transform_id = &hip_trans->transform_id;
+      hip_cipher = (tlv_hip_cipher*) data;
+      transform_id = &hip_cipher->cipher_id;
     }
+  else if(type == PARAM_HIP_SUITE_LIST){
+    hit_suite_trans = (tlv_hit_suite*) data;
+    transform_id = &hit_suite_trans->hit_suite_id;
+  }
   else           /* PARAM_ESP_TRANSFORM */
     {
       esp_trans = (tlv_esp_transform*) data;
@@ -2045,7 +2021,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
     }
   else
     {
-      for (i = 0; (i < SUITE_ID_MAX) && (transforms[i] > 0); i++)
+      for (i = 0; (i < array_max) && (transforms[i] > 0); i++)
         {
           len += 2;
           *transform_id = htons(transforms[i]);

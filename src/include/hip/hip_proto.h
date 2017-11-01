@@ -102,7 +102,8 @@ typedef enum {
 #define PARAM_ACK                       449
 #define	PARAM_DH_GROUP_LIST	            511
 #define PARAM_DIFFIE_HELLMAN            513
-#define PARAM_HIP_TRANSFORM             579
+#define PARAM_HIP_CIPHER                579
+#define PARAM_HIP_SUITE_LIST            715
 #define PARAM_ENCRYPTED                 641
 #define PARAM_HOST_ID                   705
 #define PARAM_CERT                      768
@@ -141,17 +142,35 @@ typedef enum {
   ESP_NULL_HMAC_SHA1,                   /* 5 */
   ESP_NULL_HMAC_MD5,                    /* 6 */
   ESP_AES256_CBC_HMAC_SHA1,             /* 7 */
-  SUITE_ID_MAX,                         /* 8 */
-} SUITE_IDS;
+  ESP_MAX,                         /* 8 */
+} ESP_IDS;
 
 typedef enum {
-  RESERVED_1,                           /* 0 */
+  HIP_CIPHER_RESERVED,                  /* 0 */
   HIP_CIPHER_NULL_ENCRYPT,              /* 1 */
   HIP_CIPHER_AES128_CBC,                /* 2 */
-  RESERVED_2,                           /* 3 */
+  HIP_CIPHER_RESERVED_2,                /* 3 */
   HIP_CIPHER_AES256_CBC,                /* 4 */
-  HIP_CIPHER_MAX,                        /* 5 */
+  HIP_CIPHER_MAX,                       /* 5 */
 } CIPHER_IDS;
+
+/* HIT suite IDs (4 bit OGA ID)  */
+typedef enum {
+  HIT_SUITE_4BIT_RESERVED = 0,
+  HIT_SUITE_4BIT_RSA_DSA_SHA256 = 1,
+  HIT_SUITE_4BIT_ECDSA_SHA384 = 2,
+  HIT_SUITE_4BIT_ECDSA_LOW_SHA1 = 3,
+} HIT_SUITES_4BIT;
+
+/* HIT suites (8 bit encoding) */
+typedef enum {
+  HIT_SUITE_8BIT_RESERVED = 0x00,
+  HIT_SUITE_8BIT_RSA_DSA_SHA256 = 0x10,
+  HIT_SUITE_8BIT_ECDSA_SHA384 = 0x20,
+  HIT_SUITE_8BIT_ECDSA_LOW_SHA1 = 0x30,
+  HIT_SUITE_8BIT_MAX,
+} HIT_SUITES_8BIT;
+
 #define ENCR_NULL(a) (a == HIP_CIPHER_NULL_ENCRYPT)
 /* Supported transforms are compressed into a bitmask... */
 /* Default HIP transforms proposed when none are specified in config */
@@ -271,7 +290,7 @@ typedef enum {
 #define NOTIFY_NO_DH_PROPOSAL_CHOSEN                     14
 #define NOTIFY_INVALID_DH_CHOSEN                         15
 #define NOTIFY_NO_HIP_PROPOSAL_CHOSEN                    16
-#define NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN              17
+#define NOTIFY_INVALID_HIP_CIPHER_CHOSEN                 17
 #define NOTIFY_NO_ESP_PROPOSAL_CHOSEN                    18
 #define NOTIFY_INVALID_ESP_TRANSFORM_CHOSEN              19
 #define NOTIFY_AUTHENTICATION_FAILED                     24
