@@ -403,6 +403,10 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* host_id */
   location += build_tlv_hostid(&data[location], hi, HCNF.send_hi_name);
 
+  location += build_tlv_transform(&data[location],
+                                  PARAM_HIT_SUITE_LIST,
+                                  HCNF.hit_suite_list,
+                                  0);
   /* certificate */
   location += build_tlv_cert(&data[location]);
 
@@ -1991,7 +1995,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
   tlv_esp_transform *esp_trans;
   tlv_hit_suite     *hit_suite_trans;
   __u16 array_max = PARAM_HIP_CIPHER? HIP_CIPHER_MAX :
-                    PARAM_HIP_SUITE_LIST? HIT_SUITE_8BIT_MAX : ESP_MAX;
+                    PARAM_HIT_SUITE_LIST? HIT_SUITE_8BIT_MAX : ESP_MAX;
   __u16 *transform_id;
 
   tlv = (tlv_head*) data;
@@ -2002,7 +2006,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
       hip_cipher = (tlv_hip_cipher*) data;
       transform_id = &hip_cipher->cipher_id;
     }
-  else if(type == PARAM_HIP_SUITE_LIST){
+  else if(type == PARAM_HIT_SUITE_LIST){
     hit_suite_trans = (tlv_hit_suite*) data;
     transform_id = &hit_suite_trans->hit_suite_id;
   }

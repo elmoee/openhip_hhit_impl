@@ -103,9 +103,9 @@ typedef enum {
 #define	PARAM_DH_GROUP_LIST	            511
 #define PARAM_DIFFIE_HELLMAN            513
 #define PARAM_HIP_CIPHER                579
-#define PARAM_HIP_SUITE_LIST            715
 #define PARAM_ENCRYPTED                 641
 #define PARAM_HOST_ID                   705
+#define PARAM_HIT_SUITE_LIST            715
 #define PARAM_CERT                      768
 #define PARAM_PROXY_TICKET              812
 #define PARAM_AUTH_TICKET               822
@@ -245,6 +245,8 @@ typedef enum {
   KEY_LEN_NULL = 0,             /* RFC 2410 */
   KEY_LEN_MD5 = 16,             /* 128 bits per RFC 2403 */
   KEY_LEN_SHA1 = 20,            /* 160 bits per RFC 2404 */
+  KEY_LEN_SHA256 = 32,
+  KEY_LEN_SHA384 = 48,
   KEY_LEN_3DES = 24,            /* 192 bits (3x64-bit keys) RFC 2451 */
   KEY_LEN_AES128 = 16,          /* 128 bits per RFC 3686; also 192, 256-bits */
   KEY_LEN_AES256 = 32,          /* 256 bits */

@@ -124,6 +124,8 @@ int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
 int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder);
 
 
+int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length);
+
 /*
  *
  * function hip_parse_hdr()
@@ -334,7 +336,7 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
       log_(NORM, "hdr length=%d \n", hiph->hdr_len);
       if (validate_hmac(data, len, rvs_hmac, length,
                         get_key(hip_a, HIP_INTEGRITY, TRUE),
-                        hip_a->hip_transform))
+                        hip_a->hit_suite))
       {
         log_(WARN, "Invalid RVS_HMAC.\n");
         if (hip_a->from_via)
@@ -356,7 +358,7 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
 
       tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
 
-      if ((handle_dh_groups(&dhGroupList->group_ids, ntohs(dhGroupList->length), false)) < 0)
+      if ((handle_dh_groups(&dhGroupList->group_ids, length, true)) < 0)
       {
         hip_send_notify(
             hip_a,
@@ -787,7 +789,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
                         NULL, 0);
         return(-1);
       }
-      hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
+      //hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
     }
     else if (type == PARAM_ESP_TRANSFORM)
     {
@@ -878,6 +880,10 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
     {
       /* these parameters already processed */
     }
+    else if(type == PARAM_HIT_SUITE_LIST){
+      tlv_hit_suite *hit_suite_list = (tlv_hit_suite*) data;
+      handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length);
+    }
     else if (type == PARAM_CERT)
     {
       if (HCNF.peer_certificate_required &&
@@ -896,10 +902,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       ;
     }
     else if(type == PARAM_DH_GROUP_LIST){
-      tlv_dh_group_list *dhGroupList = malloc(sizeof(tlv_dh_group_list) + length * sizeof(__u8));
-      memcpy(dhGroupList, &data[location] , sizeof(tlv_dh_group_list) + length * sizeof(__u8));
-
-      if ((handle_dh_groups(&dhGroupList->group_ids, ntohs(dhGroupList->length), true)) < 0)
+      tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
+      if ((handle_dh_groups(&dhGroupList->group_ids, length, false)) < 0)
       {
         hip_send_notify(
             hip_a,
@@ -908,7 +912,6 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
             0);
         return(-1);
       }
-      free(dhGroupList);
     }
     else
     {
@@ -938,6 +941,17 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
     RSA_free(hip_a->peer_hi->rsa);
   }
   memcpy(hip_a->peer_hi, &saved_peer_hi, sizeof(saved_peer_hi));
+  return(-1);
+}
+
+int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length) {
+
+  for(int i = 0; i < length; i++, id++){
+    if(*id = hip_a->hi->algorithm_id){
+      hip_a -> hit_suite = hip_a->peer_hi->algorithm_id;
+      return(0);
+    }
+  }
   return(-1);
 }
 
@@ -1234,7 +1248,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
             0);
         return(-1);
       }
-      hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
+      //hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
       /* Must compute keys here so we can use them below. */
       if (got_dh)
       {
@@ -1453,10 +1467,11 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
       hiph->hdr_len = (len / 8) - 1;
       log_(NORM, "HMAC verify over %d bytes. ",len);
       log_(NORM, "hdr length=%d \n", hiph->hdr_len);
+      hip_a->hit_suite = hip_a->hi->algorithm_id;
       if (validate_hmac(data, len,
                         hmac, length,
                         get_key(hip_a, HIP_INTEGRITY, TRUE),
-                        hip_a->hip_transform))
+                        hip_a->hit_suite))
       {
         log_(WARN, "Invalid HMAC.\n");
         hip_send_notify(hip_a,
@@ -1848,7 +1863,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
       if (validate_hmac(data, len,
                         hmac, 20,
                         get_key(hip_a, HIP_INTEGRITY, TRUE),
-                        hip_a->hip_transform))
+                        hip_a->hit_suite))
       {
         log_(WARN, "Invalid HMAC_2.\n");
         hip_send_notify(hip_a,
@@ -2087,7 +2102,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
       if (validate_hmac(data, len,
                         hmac, length,
                         key,
-                        hip_a->hip_transform))
+                        hip_a->hit_suite))
       {
         log_(WARN, "Invalid HMAC.\n");
         hip_send_notify(hip_a,
@@ -2167,7 +2182,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
           len,
           auth_ticket->hmac, sizeof(auth_ticket->hmac),
           get_key(hip_a, HIP_INTEGRITY, TRUE),
-          hip_a->hip_transform))
+          hip_a->hit_suite))
       {
         log_(WARN, "Invalid HMAC over ticket.\n");
       }
@@ -2443,7 +2458,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
         if (validate_hmac(data, len, rvs_hmac, length,
                           get_key(hip_a_rvs,
                                   HIP_INTEGRITY, TRUE),
-                          hip_a_rvs->hip_transform))
+                          hip_a_rvs->hit_suite))
         {
           log_(WARN, "Invalid RVS_HMAC.\n");
           if (hip_a->from_via)
@@ -3290,7 +3305,7 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
       if (validate_hmac(data, len,
                         hmac, length,
                         get_key(hip_a, HIP_INTEGRITY, TRUE),
-                        hip_a->hip_transform))
+                        hip_a->hit_suite))
       {
         log_(WARN, "Invalid HMAC.\n");
         hip_send_notify(hip_a,
@@ -5234,11 +5249,11 @@ int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
   if(is_responder){
     dh_group_packet = HCNF.dh_group_list;
     available_group_id = conf_dh_group_ids_to_mask(dh_group_ids,length);
-    length = DH_MAX;
+    length = DH_MAX-1;
   } else{
 
     dh_group_packet =  dh_group_ids;
-    available_group_id = conf_dh_group_ids_to_mask(HCNF.dh_group_list,DH_MAX);
+    available_group_id = conf_dh_group_ids_to_mask(HCNF.dh_group_list, DH_MAX-1);
   }
 
   HCNF.dh_group = 0;

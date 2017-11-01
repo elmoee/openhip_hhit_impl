@@ -362,6 +362,7 @@ typedef struct _hip_assoc {
   __u16 hip_cipher;
   __u16 hip_transform;
   __u16 esp_transform;
+  __u16 hit_suite;
   __u16 available_transforms;       /* bit mask used to flag available xfrms */
   __u8 dh_group_id;
   EVP_PKEY *evp_dh;
