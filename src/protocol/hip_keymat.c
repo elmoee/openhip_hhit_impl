@@ -145,6 +145,30 @@ void compute_keys(hip_assoc *hip_a)
 /*
  * Compute a new keymat based on the DH secret Kij and HITs
  */
+void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
+  SHA_CTX c;
+  SHA256_CTX c_256;
+  SHA512_CTX c_384;
+
+  switch(hip_a->hit_suite){
+    case HIT_SUITE_8BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&c);
+      SHA1_Update(&c, hashdata, location);
+      SHA1_Final(hash, &c);
+    break;
+    case HIT_SUITE_8BIT_RSA_DSA_SHA256:
+      SHA256_Init(&c_256);
+      SHA256_Update(&c_256, hashdata, location);
+      SHA256_Final(hash, &c_256);
+      break;
+    case HIT_SUITE_8BIT_ECDSA_SHA384:
+      SHA384_Init(&c_384);
+      SHA384_Update(&c_384, hashdata, location);
+      SHA384_Final(hash, &c_384);
+      break;
+  }
+}
+
 int compute_keymat(hip_assoc *hip_a)
 {
   int i, result;
@@ -153,7 +177,6 @@ int compute_keymat(hip_assoc *hip_a)
   unsigned char hash[SHA_DIGEST_LENGTH], last_byte = 1;
   BIGNUM *hit1, *hit2;
   hip_hit *hitp;
-  SHA_CTX c;
 
   if (hip_a == NULL)
     {
@@ -203,10 +226,8 @@ int compute_keymat(hip_assoc *hip_a)
   memcpy(&hashdata[location], &last_byte, sizeof(last_byte));
   location += sizeof(last_byte);
 
-  /* SHA1 hash the concatenation */
-  SHA1_Init(&c);
-  SHA1_Update(&c, hashdata, location);
-  SHA1_Final(hash, &c);
+  /* SHA hash the concatenation */
+  compute_hash(hip_a, hashdata, hash, location);
   memcpy(hip_a->keymat, hash, SHA_DIGEST_LENGTH);
   location = SHA_DIGEST_LENGTH;
 
@@ -223,9 +244,7 @@ int compute_keymat(hip_assoc *hip_a)
       len += SHA_DIGEST_LENGTH;
       memcpy(&hashdata[len], &last_byte, sizeof(last_byte));           /* i+1 */
       len += sizeof(last_byte);
-      SHA1_Init(&c);
-      SHA1_Update(&c, hashdata, len);
-      SHA1_Final(hash, &c);
+      compute_hash(hip_a, hashdata, hash, len);
       /* accumulate the keying material */
       memcpy(&hip_a->keymat[location], hash, SHA_DIGEST_LENGTH);
       location += SHA_DIGEST_LENGTH;

@@ -882,7 +882,13 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
     }
     else if(type == PARAM_HIT_SUITE_LIST){
       tlv_hit_suite *hit_suite_list = (tlv_hit_suite*) data;
-      handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length);
+
+      if(handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length) < 0){
+        hip_send_notify(hip_a,
+                        NOTIFY_UNSUPPORTED_HIT_SUITE,
+                        NULL, 0);
+        return(-1);
+      }
     }
     else if (type == PARAM_CERT)
     {
@@ -947,7 +953,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length) {
 
   for(int i = 0; i < length; i++, id++){
-    if(*id = hip_a->hi->algorithm_id){
+    if(*id == hip_a->hi->algorithm_id){
       hip_a -> hit_suite = hip_a->peer_hi->algorithm_id;
       return(0);
     }
@@ -3864,19 +3870,19 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
 
   switch (type)
   {
-    case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-    case ESP_NULL_HMAC_SHA1:
-      HMAC(   EVP_sha1(),
+    case HIT_SUITE_8BIT_RSA_DSA_SHA256:
+      HMAC(   EVP_sha256(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
       break;
-    case ESP_3DES_CBC_HMAC_MD5:
-    case ESP_NULL_HMAC_MD5:
-      HMAC(   EVP_md5(),
+    case HIT_SUITE_8BIT_ECDSA_SHA384:
+      HMAC(   EVP_sha384(),
+              key, key_len,
+              data, data_len,
+              hmac_md, &hmac_md_len  );
+    case HIT_SUITE_8BIT_ECDSA_LOW_SHA1:
+      HMAC(   EVP_sha1(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );

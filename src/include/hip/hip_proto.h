@@ -295,6 +295,7 @@ typedef enum {
 #define NOTIFY_INVALID_HIP_CIPHER_CHOSEN                 17
 #define NOTIFY_NO_ESP_PROPOSAL_CHOSEN                    18
 #define NOTIFY_INVALID_ESP_TRANSFORM_CHOSEN              19
+#define NOTIFY_UNSUPPORTED_HIT_SUITE                     20
 #define NOTIFY_AUTHENTICATION_FAILED                     24
 #define NOTIFY_CHECKSUM_FAILED                           26
 #define NOTIFY_HMAC_FAILED                               28
