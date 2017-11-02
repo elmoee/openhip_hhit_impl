@@ -142,10 +142,7 @@ void compute_keys(hip_assoc *hip_a)
   draw_keys(hip_a, TRUE, 0);
 }
 
-/*
- * Compute a new keymat based on the DH secret Kij and HITs
- */
-void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
+int compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
   SHA_CTX c;
   SHA256_CTX c_256;
   SHA512_CTX c_384;
@@ -155,23 +152,27 @@ void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int loc
       SHA1_Init(&c);
       SHA1_Update(&c, hashdata, location);
       SHA1_Final(hash, &c);
-    break;
+      return(SHA_DIGEST_LENGTH);
     case HIT_SUITE_8BIT_RSA_DSA_SHA256:
       SHA256_Init(&c_256);
       SHA256_Update(&c_256, hashdata, location);
       SHA256_Final(hash, &c_256);
-      break;
+      return (SHA256_DIGEST_LENGTH);
     case HIT_SUITE_8BIT_ECDSA_SHA384:
       SHA384_Init(&c_384);
       SHA384_Update(&c_384, hashdata, location);
       SHA384_Final(hash, &c_384);
-      break;
+      return(SHA384_DIGEST_LENGTH);
   }
 }
 
+/*
+ * Compute a new keymat based on the DH secret Kij and HITs
+ */
+
 int compute_keymat(hip_assoc *hip_a)
 {
-  int i, result;
+  int i, result, sha_digits;
   int location, len, dh_secret_len, hashdata_len;
   char *hashdata;
   unsigned char hash[SHA_DIGEST_LENGTH], last_byte = 1;
@@ -227,7 +228,7 @@ int compute_keymat(hip_assoc *hip_a)
   location += sizeof(last_byte);
 
   /* SHA hash the concatenation */
-  compute_hash(hip_a, hashdata, hash, location);
+  sha_digits = compute_hash(hip_a, hashdata, hash, location);
   memcpy(hip_a->keymat, hash, SHA_DIGEST_LENGTH);
   location = SHA_DIGEST_LENGTH;
 
@@ -235,19 +236,19 @@ int compute_keymat(hip_assoc *hip_a)
    * 768 bytes / 20 bytes per hash = 38 loops
    * this is enough space for 32 ESP keys
    */
-  for (i = 1; i < (KEYMAT_SIZE / SHA_DIGEST_LENGTH); i++)
+  for (i = 1; i < (KEYMAT_SIZE / sha_digits); i++)
     {
       last_byte++;
       memcpy(hashdata, hip_a->dh_secret, dh_secret_len);           /* Kij */
       len = dh_secret_len;
-      memcpy(&hashdata[len], hash, SHA_DIGEST_LENGTH);           /* K_i) */
-      len += SHA_DIGEST_LENGTH;
+      memcpy(&hashdata[len], hash, sha_digits);           /* K_i) */
+      len += sha_digits;
       memcpy(&hashdata[len], &last_byte, sizeof(last_byte));           /* i+1 */
       len += sizeof(last_byte);
       compute_hash(hip_a, hashdata, hash, len);
       /* accumulate the keying material */
-      memcpy(&hip_a->keymat[location], hash, SHA_DIGEST_LENGTH);
-      location += SHA_DIGEST_LENGTH;
+      memcpy(&hip_a->keymat[location], hash, sha_digits);
+      location += sha_digits;
     }
   free(hashdata);
   BN_free(hit1);

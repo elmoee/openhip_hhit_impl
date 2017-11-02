@@ -1995,7 +1995,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
   tlv_esp_transform *esp_trans;
   tlv_hit_suite     *hit_suite_trans;
   __u16 array_max = PARAM_HIP_CIPHER? HIP_CIPHER_MAX :
-                    PARAM_HIT_SUITE_LIST? HIT_SUITE_8BIT_MAX : ESP_MAX;
+                    (PARAM_HIT_SUITE_LIST? HIT_SUITE_8BIT_MAX : ESP_MAX);
   __u16 *transform_id;
 
   tlv = (tlv_head*) data;

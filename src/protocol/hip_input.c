@@ -953,8 +953,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length) {
 
   for(int i = 0; i < length; i++, id++){
-    if(*id == hip_a->hi->algorithm_id){
-      hip_a -> hit_suite = hip_a->peer_hi->algorithm_id;
+    if(*id == hip_a->hi->hit_suite_id){
+      hip_a -> hit_suite = hip_a->peer_hi->hit_suite_id;
       return(0);
     }
   }

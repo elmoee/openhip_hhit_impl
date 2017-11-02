@@ -168,7 +168,7 @@ void hip_handle_multihoming_timeouts(struct timeval *now);
 /* hip_keymat.c */
 int set_secret_key(unsigned char *key, hip_assoc *hip_a);
 unsigned char *get_key(hip_assoc *hip_a, int type, int peer);
-void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location);
+int compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location);
 int auth_key_len_hit_suite(int suite_id);
 void compute_keys(hip_assoc *hip_a);
 int compute_keymat(hip_assoc *hip_a);
