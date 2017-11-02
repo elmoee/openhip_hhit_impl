@@ -1935,8 +1935,8 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
   unsigned char ij[48] = {0};
   unsigned char ij_part1[40] = {0};
-  unsigned char md[SHA_DIGEST_LENGTH] = {0};
-  SHA_CTX c;
+  unsigned char md[SHA256_DIGEST_LENGTH] = {0};
+  SHA256_CTX c;
   int k;
   struct timeval time1, time2;
 
@@ -1947,7 +1947,7 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
 
   log_(NORM, "Using cookie from R1: ");
   print_cookie(cookie);
-  log_(NORM, "Calculating Ltrunc(SHA1(I|Rand),K)...");
+  log_(NORM, "Calculating Ltrunc(SHA256(I|Rand),K)...");
 
   k = cookie->k;
   if (k == 0)
@@ -1975,9 +1975,9 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
         }
       memcpy(ij, ij_part1, 40);
       RAND_bytes(&ij[40], 8);
-      SHA1_Init(&c);
-      SHA1_Update(&c, ij, 48);
-      SHA1_Final(md, &c);
+      SHA256_Init(&c);
+      SHA256_Update(&c, ij, 48);
+      SHA256_Final(md, &c);
 
       if (!OPT.daemon && (D_VERBOSE == OPT.debug) &&
           ((i % 10000) == 0))
@@ -1985,7 +1985,7 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
           printf(".");
           fflush(stdout);
         }
-      if (compare_bits((char*)md, SHA_DIGEST_LENGTH, zero, 8,
+      if (compare_bits((char*)md, SHA256_DIGEST_LENGTH, zero, 8,
                        k) == 0)
         {
           gettimeofday(&time2, NULL);
@@ -2019,10 +2019,10 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit* hit_i, hip_hit* hit_r, __u64 solution)
 {
-  unsigned char md[SHA_DIGEST_LENGTH];
+  unsigned char md[SHA256_DIGEST_LENGTH];
   unsigned char ij[48];
   __u8 k;
-  SHA_CTX c;
+  SHA256_CTX c;
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
 
   /* R1 cache slots may be empty */
@@ -2069,11 +2069,11 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
   k =  cookie_r->k;
   log_(NORM, "Verifying cookie to %u bits\n", k);
 
-  SHA1_Init(&c);
-  SHA1_Update(&c, ij, 48);
-  SHA1_Final(md, &c);
+  SHA256_Init(&c);
+  SHA256_Update(&c, ij, 48);
+  SHA256_Final(md, &c);
 
-  if (compare_bits((char *)md, SHA_DIGEST_LENGTH, zero, 8, k) == 0)
+  if (compare_bits((char *)md, SHA256_DIGEST_LENGTH, zero, 8, k) == 0)
     {
       log_(NORM, "Cookie verified ok.\n");
       return(0);
@@ -2082,8 +2082,8 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
     {
       log_(NORM, "ij given = ");
       print_hex(ij, 48);
-      log_(NORM, " SHA1 = ");
-      print_hex(md, SHA_DIGEST_LENGTH);
+      log_(NORM, " SHA256 = ");
+      print_hex(md, SHA256_DIGEST_LENGTH);
       log_(WARN, "Cookie did not pass verification.\n");
       if (OPT.permissive)
         {
@@ -2135,7 +2135,7 @@ int khi_expand(__u8 *in, __u8 *out, int len)
 int khi_encode_n(__u8 *in, int len, __u8 *out, int n)
 {
   BIGNUM *a;
-  int m = ((SHA_DIGEST_LENGTH * 8) - n) / 2;
+  int m = ((SHA256_DIGEST_LENGTH * 8) - n) / 2;
   /*
    * take middle n bits of a number:
    *
@@ -2210,15 +2210,15 @@ int khi_hi_input(hi_node *hi, __u8 *out)
  *
  * out:		Returns 0 if successful, -1 on error.
  *
- * Converts the Host Identity to a Type 1 SHA-1 HIT.
+ * Converts the Host Identity to a Type 1 SHA-256 HIT.
  *
  */
 int hi_to_hit(hi_node *hi, hip_hit hit)
 {
   int len;
   __u8 *data = NULL;
-  SHA_CTX ctx;
-  unsigned char hash[SHA_DIGEST_LENGTH];
+  SHA256_CTX ctx;
+  unsigned char hash[SHA256_DIGEST_LENGTH];
   __u32 prefix;
 
   if (!hi)
@@ -2275,18 +2275,17 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
   memcpy(&data[0], khi_context_id, sizeof(khi_context_id));
   khi_hi_input(hi, &data[sizeof(khi_context_id)]);
   /* Compute the hash */
-  SHA1_Init(&ctx);
-  SHA1_Update(&ctx, data, len);
-  SHA1_Final(hash, &ctx);
+  SHA256_Init(&ctx);
+  SHA256_Update(&ctx, data, len);
+  SHA256_Final(hash, &ctx);
 
-  /* KHI = Prefix | Encode_n( Hash)
+  /* KHI = Prefix | OGA ID | Encode_n( Hash)
    */
-  prefix = htonl(HIT_PREFIX_SHA1_32BITS);
+  prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
-  khi_encode_n(hash, SHA_DIGEST_LENGTH, &hit[3], 100 );
-  /* lower 100 bits of HIT */
-  hit[3] = (HIT_PREFIX_SHA1_32BITS & 0xFF) |
-           (hit[3] & 0x0F);       /* fixup the 4th byte */
+  khi_encode_n(hash, SHA256_DIGEST_LENGTH, &hit[4], 96 );
+  /* lower 96 bits of HIT */
+  hit[3] |= (0x0F & hi->hit_suite_id); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
   free(data);
   return(0);
 }
