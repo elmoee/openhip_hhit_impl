@@ -142,28 +142,31 @@ void compute_keys(hip_assoc *hip_a)
   draw_keys(hip_a, TRUE, 0);
 }
 
-int compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
-  SHA_CTX c;
+void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
+  //SHA_CTX c;
   SHA256_CTX c_256;
-  SHA512_CTX c_384;
+  /*SHA512_CTX c_384;
 
   switch(hip_a->hit_suite){
-    case HIT_SUITE_8BIT_ECDSA_LOW_SHA1:
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       SHA1_Init(&c);
       SHA1_Update(&c, hashdata, location);
       SHA1_Final(hash, &c);
-      return(SHA_DIGEST_LENGTH);
-    case HIT_SUITE_8BIT_RSA_DSA_SHA256:
+      break;
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       SHA256_Init(&c_256);
       SHA256_Update(&c_256, hashdata, location);
       SHA256_Final(hash, &c_256);
-      return (SHA256_DIGEST_LENGTH);
-    case HIT_SUITE_8BIT_ECDSA_SHA384:
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
       SHA384_Init(&c_384);
       SHA384_Update(&c_384, hashdata, location);
       SHA384_Final(hash, &c_384);
-      return(SHA384_DIGEST_LENGTH);
-  }
+      break;
+  }*/
+  SHA256_Init(&c_256);
+  SHA256_Update(&c_256, hashdata, location);
+  SHA256_Final(hash, &c_256);
 }
 
 /*
@@ -172,10 +175,11 @@ int compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int loca
 
 int compute_keymat(hip_assoc *hip_a)
 {
-  int i, result, sha_digits;
+  int i, result;
   int location, len, dh_secret_len, hashdata_len;
   char *hashdata;
-  unsigned char hash[SHA_DIGEST_LENGTH], last_byte = 1;
+  int sha_key_len = auth_key_len_hit_suite(hip_a->hit_suite);
+  unsigned char hash[sha_key_len], last_byte = 1;
   BIGNUM *hit1, *hit2;
   hip_hit *hitp;
 
@@ -228,27 +232,27 @@ int compute_keymat(hip_assoc *hip_a)
   location += sizeof(last_byte);
 
   /* SHA hash the concatenation */
-  sha_digits = compute_hash(hip_a, hashdata, hash, location);
-  memcpy(hip_a->keymat, hash, SHA_DIGEST_LENGTH);
-  location = SHA_DIGEST_LENGTH;
+  compute_hash(hip_a, hashdata, hash, location);
+  memcpy(hip_a->keymat, hash, sha_key_len);
+  location = sha_key_len;
 
   /* compute K2 ... K38
    * 768 bytes / 20 bytes per hash = 38 loops
    * this is enough space for 32 ESP keys
    */
-  for (i = 1; i < (KEYMAT_SIZE / sha_digits); i++)
+  for (i = 1; i < (KEYMAT_SIZE / sha_key_len); i++)
     {
       last_byte++;
       memcpy(hashdata, hip_a->dh_secret, dh_secret_len);           /* Kij */
       len = dh_secret_len;
-      memcpy(&hashdata[len], hash, sha_digits);           /* K_i) */
-      len += sha_digits;
+      memcpy(&hashdata[len], hash, sha_key_len);           /* K_i) */
+      len += sha_key_len;
       memcpy(&hashdata[len], &last_byte, sizeof(last_byte));           /* i+1 */
       len += sizeof(last_byte);
       compute_hash(hip_a, hashdata, hash, len);
       /* accumulate the keying material */
-      memcpy(&hip_a->keymat[location], hash, sha_digits);
-      location += sha_digits;
+      memcpy(&hip_a->keymat[location], hash, sha_key_len);
+      location += sha_key_len;
     }
   free(hashdata);
   BN_free(hit1);
@@ -394,11 +398,11 @@ int auth_key_len_hit_suite(int suite_id)
 {
   switch (suite_id)
   {
-    case HIT_SUITE_8BIT_RSA_DSA_SHA256:
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       return(KEY_LEN_SHA256);
-    case HIT_SUITE_8BIT_ECDSA_SHA384:
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
       return(KEY_LEN_SHA384);
-    case HIT_SUITE_8BIT_ECDSA_LOW_SHA1:
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       return(KEY_LEN_SHA1);
     default:
       break;

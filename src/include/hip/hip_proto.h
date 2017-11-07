@@ -155,21 +155,22 @@ typedef enum {
 } CIPHER_IDS;
 
 /* HIT suite IDs (4 bit OGA ID)  */
+/*typedef enum {
+  HIT_SUITE_4BIT_RESERVED = 0,
+  HIT_SUITE_4BIT_RSA_DSA_SHA256 = 1,
+  HIT_SUITE_4BIT_ECDSA_SHA384 = 2,
+  HIT_SUITE_4BIT_ECDSA_LOW_SHA1 = 3,
+  HIT_SUITE_4BIT_MAX,
+} HIT_SUITES_4BIT;*/
+
+/* HIT suites (8 bit encoding) */
 typedef enum {
   HIT_SUITE_4BIT_RESERVED = 0,
   HIT_SUITE_4BIT_RSA_DSA_SHA256 = 1,
   HIT_SUITE_4BIT_ECDSA_SHA384 = 2,
   HIT_SUITE_4BIT_ECDSA_LOW_SHA1 = 3,
+  HIT_SUITE_4BIT_MAX,
 } HIT_SUITES_4BIT;
-
-/* HIT suites (8 bit encoding) */
-typedef enum {
-  HIT_SUITE_8BIT_RESERVED = 0x00,
-  HIT_SUITE_8BIT_RSA_DSA_SHA256 = 0x10,
-  HIT_SUITE_8BIT_ECDSA_SHA384 = 0x20,
-  HIT_SUITE_8BIT_ECDSA_LOW_SHA1 = 0x30,
-  HIT_SUITE_8BIT_MAX,
-} HIT_SUITES_8BIT;
 
 #define ENCR_NULL(a) (a == HIP_CIPHER_NULL_ENCRYPT)
 /* Supported transforms are compressed into a bitmask... */
@@ -200,23 +201,6 @@ typedef enum {
 #define HIP_RSA_DFT_EXP RSA_F4 /* 0x10001L = 65537; 3 and 17 are also common */
 #define HI_TYPESTR(a)  ((a == HI_ALG_DSA) ? "DSA" : \
                         (a == HI_ALG_RSA) ? "RSA" : "UNKNOWN")
-
-/* HIT suite IDs (4 bit OGA ID)  */
-typedef enum {
-  HIT_SUITE_4BIT_RESERVED = 0,
-  HIT_SUITE_4BIT_RSA_DSA_SHA256 = 1,
-  HIT_SUITE_4BIT_ECDSA_SHA384 = 2,
-  HIT_SUITE_4BIT_ECDSA_LOW_SHA1 = 3,
-} HIT_SUITES_4BIT;
-
-
-/* HIT suites (8 bit encoding) */
-typedef enum {
-  HIT_SUITE_8BIT_RESERVED = 0x00,
-  HIT_SUITE_8BIT_RSA_DSA_SHA256 = 0x10,
-  HIT_SUITE_8BIT_ECDSA_SHA384 = 0x20,
-  HIT_SUITE_8BIT_ECDSA_LOW_SHA1 = 0x30,
-} HIT_SUITES_8BIT;
 
 /* SADB algorithms */
 #define SADB_EALG_3DESCBC 3

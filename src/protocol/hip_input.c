@@ -635,14 +635,14 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       }
       if (!validate_hit(hiph->hit_sndr, hip_a->peer_hi))
       {
-        /*log_(WARN, "HI in R1 does not match the "
+        log_(WARN, "HI in R1 does not match the "
             "sender's HIT\n");
         hip_send_notify(hip_a, NOTIFY_INVALID_HIT,
                         NULL, 0);
         if (!OPT.permissive)
         {
           return(-1);
-        }*/
+        }
       }
       else
       {
@@ -881,7 +881,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       /* these parameters already processed */
     }
     else if(type == PARAM_HIT_SUITE_LIST){
-      tlv_hit_suite *hit_suite_list = (tlv_hit_suite*) data;
+      tlv_hit_suite *hit_suite_list = (tlv_hit_suite*) &data[location];
 
       if(handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length) < 0){
         hip_send_notify(hip_a,
@@ -951,9 +951,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 }
 
 int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length) {
-
   for(int i = 0; i < length; i++, id++){
-    if(*id == hip_a->hi->hit_suite_id){
+    if(htons(*id) == hip_a->hi->hit_suite_id){
       hip_a -> hit_suite = hip_a->peer_hi->hit_suite_id;
       return(0);
     }
@@ -1258,6 +1257,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
       /* Must compute keys here so we can use them below. */
       if (got_dh)
       {
+        hip_a -> hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
         compute_keys(hip_a);
         if (proposed_keymat_index >
             hip_a->keymat_index)
@@ -3741,8 +3741,8 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
                        DSA *dsa, RSA *rsa)
 {
   int err;
-  SHA_CTX c;
-  unsigned char md[SHA_DIGEST_LENGTH];
+  SHA256_CTX c;
+  unsigned char md[SHA256_DIGEST_LENGTH];
   DSA_SIG dsa_sig;
   int length, sig_len;
   tlv_hip_sig *sig = (tlv_hip_sig*)tlv;
@@ -3798,13 +3798,13 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
   sig_len = length - 1;
 
   /* calculate SHA1 hash of the HIP message */
-  SHA1_Init(&c);
-  SHA1_Update(&c, data, data_len);
-  SHA1_Final(md, &c);
+  SHA256_Init(&c);
+  SHA256_Update(&c, data, data_len);
+  SHA256_Final(md, &c);
 
   /* for debugging, print out md or signature */
   log_(NORM, "SHA1: ");
-  print_hex(md, SHA_DIGEST_LENGTH);
+  print_hex(md, SHA256_DIGEST_LENGTH);
   log_(NORM, "\n");
 
   switch (alg)
@@ -3814,13 +3814,13 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
       dsa_sig.r = BN_bin2bn(&sig->signature[1], 20, NULL);
       dsa_sig.s = BN_bin2bn(&sig->signature[21], 20, NULL);
       /* verify the DSA signature */
-      err = DSA_do_verify(md, SHA_DIGEST_LENGTH, &dsa_sig, dsa);
+      err = DSA_do_verify(md, SHA256_DIGEST_LENGTH, &dsa_sig, dsa);
       BN_free(dsa_sig.r);
       BN_free(dsa_sig.s);
       break;
     case HI_ALG_RSA:
       /* verify the RSA signature */
-      err = RSA_verify(NID_sha1, md, SHA_DIGEST_LENGTH,
+      err = RSA_verify(NID_sha1, md, SHA256_DIGEST_LENGTH,
                        sig->signature, sig_len, rsa);
       break;
     default:
@@ -3870,18 +3870,18 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
 
   switch (type)
   {
-    case HIT_SUITE_8BIT_RSA_DSA_SHA256:
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
       break;
-    case HIT_SUITE_8BIT_ECDSA_SHA384:
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
       HMAC(   EVP_sha384(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
-    case HIT_SUITE_8BIT_ECDSA_LOW_SHA1:
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       HMAC(   EVP_sha1(),
               key, key_len,
               data, data_len,
@@ -4840,9 +4840,10 @@ int check_tlv_length(int type, int length)
     case PARAM_PUZZLE:
       return(length == 12);
     case PARAM_SOLUTION:
+      return(length == 4+SHA256_DIGEST_LENGTH/4);
     case PARAM_HMAC:
     case PARAM_HMAC_2:
-      return(length == 20);
+      return(length == 32);
     case PARAM_SEQ:
       return(length == 4);
       /* not checking variable length */

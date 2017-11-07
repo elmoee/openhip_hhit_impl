@@ -104,7 +104,7 @@
  * IPsec-related constants
  */
 #define DSA_PRIV 20 /* Size in bytes of DSA private key and Q value */
-#define HIP_KEY_SIZE 32 /* Must be large enough to hold largest possible key */
+#define HIP_KEY_SIZE 48 /* Must be large enough to hold largest possible key */
 #define HIP_DSA_SIG_SIZE 41 /* T(1) + R(20) + S(20)  from RFC 2536 */
 #define MAX_SIG_SIZE 512 /* RFC 3110 4096-bits max RSA length */
 #define NUMKEYS 8 /* HIP, HMAC, HIP, HMAC, ESP, AUTH, ESP, AUTH */
@@ -485,12 +485,12 @@ typedef struct _hi_node {
   __u32 update_id;              /* this host's Update ID		*/
   /* Options */
   char algorithm_id;
-  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
   char name[MAX_HI_NAMESIZE];
   int name_len;                 /* use this instead of strlen()		*/
+  char hit_suite_id;
 } hi_node;
 
 #ifdef HIP_VPLS
@@ -500,12 +500,12 @@ struct peer_node
   int size;       /* Size in bytes of the Host Identity   */
   __u64 r1_gen_count;
   char algorithm_id;
-  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
   char name[MAX_HI_NAMESIZE];
   struct _sockaddr_list **rvs_addrs;
+  char hit_suite_id;
 };
 #endif /* HIP_VPLS */
 
@@ -715,7 +715,7 @@ typedef struct _tlv_hmac
 {
   __u16 type;
   __u16 length;
-  __u8 hmac[20];
+  __u8 hmac[32];
 } tlv_hmac;
 
 typedef struct _tlv_hip_sig
@@ -893,7 +893,7 @@ struct hip_conf {
   __u16 esp_transforms[ESP_MAX];       /* ESP transforms proposed in R1 */
   __u16 hip_transforms[ESP_MAX];       /* HIP transforms proposed in R1 */
   __u16 hip_ciphers[HIP_CIPHER_MAX];
-  __u16 hit_suite_list[HIT_SUITE_8BIT_MAX];
+  __u16 hit_suite_list[HIT_SUITE_4BIT_MAX];
   char *log_filename;                   /* non-default pathname for log	     */
   struct sockaddr_storage dht_server;       /* address+port of DHT server    */
   struct sockaddr_storage dns_server;       /* address of server w/HIP RRs   */

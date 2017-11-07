@@ -966,6 +966,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
       /* attempt to send a NOTIFY packet */
       if (VALID_FAM(src) && VALID_FAM(dst) && hiph)
         {
+
           hip_a = find_hip_association(src, dst, hiph);
           if ((hip_a) && (hip_a->state >= I1_SENT) &&
               (hip_a->state < E_FAILED))
@@ -1004,6 +1005,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 
   /* lookup using addresses and HITs */
   hip_a = find_hip_association(src, dst, hiph);
+
   /* for opportunistic HIP, adopt unknown HIT from R1 */
   if ((hip_a == NULL) && OPT.opportunistic &&
       (hiph->packet_type == HIP_R1))
@@ -1027,6 +1029,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
       ((hiph->packet_type == UPDATE) || (hiph->packet_type == HIP_R1)))
     {
       hip_a = find_hip_association2(hiph);
+      log_(WARN, "DHT lookup !! \n");
     }
 
   /* UPDATE packet might be for RVS client. */

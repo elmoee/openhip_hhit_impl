@@ -85,6 +85,7 @@ int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh_group_list ( __u8 *data );
 int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
+int build_tlv_hit_suite(__u8 *data, __u16 *hit_suites);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
@@ -403,10 +404,8 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* host_id */
   location += build_tlv_hostid(&data[location], hi, HCNF.send_hi_name);
 
-  location += build_tlv_transform(&data[location],
-                                  PARAM_HIT_SUITE_LIST,
-                                  HCNF.hit_suite_list,
-                                  0);
+  location += build_tlv_hit_suite(&data[location],
+                                  HCNF.hit_suite_list);
   /* certificate */
   location += build_tlv_cert(&data[location]);
 
@@ -426,12 +425,10 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   location += build_tlv_signature(hi, data, location, TRUE);
   hiph->hdr_len = (location / 8) - 1;
-
   /* insert the cookie (OPAQUE and I) */
   memcpy(&data[cookie_location], cookie, sizeof(hipcookie));
 
   /* if ECHO_REQUEST_NOSIG is needed, put it here */
-
 
   return(location);
 }
@@ -543,7 +540,7 @@ int hip_send_I2(hip_assoc *hip_a)
   /* puzzle solution */
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
-  sol->length = htons(sizeof(tlv_solution) - 4);
+  sol->length = htons(4 + SHA256_DIGEST_LENGTH/4);
   memcpy(&sol->cookie, &cookie, sizeof(hipcookie));
   if ((err = solve_puzzle(&cookie, &solution,
                           &hip_a->hi->hit, &hip_a->peer_hi->hit)) < 0)
@@ -560,6 +557,7 @@ int hip_send_I2(hip_assoc *hip_a)
   log_(NORM, "solution: 0x%llx\n",solution);
 
   /* now that we have the solution, we can compute the keymat */
+  hip_a -> hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
   compute_keys(hip_a);
   esp_info->keymat_index = htons((__u16)hip_a->keymat_index);
 
@@ -1280,22 +1278,12 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
                    sizeof(ticket->action) +
                    sizeof(ticket->lifetime);
 
-  switch (hip_a->hip_transform)
+  switch (hip_a->hit_suite)
     {
-    case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-    case ESP_NULL_HMAC_SHA1:
-      HMAC(   EVP_sha1(),
-              get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
-              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
-              hmac_md, &hmac_md_len  );
-      break;
-    case ESP_3DES_CBC_HMAC_MD5:
-    case ESP_NULL_HMAC_MD5:
-      HMAC(   EVP_md5(),
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
               auth_key_len(hip_a->hip_transform),
               (__u8 *)&ticket->hmac_key_index, length_to_hmac,
@@ -1982,6 +1970,29 @@ int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
   return(len);
 }
 
+int build_tlv_hit_suite(__u8 *data, __u16 *hit_suites)
+{
+  int i, len = 0;
+  tlv_head *tlv;
+  tlv_hit_suite *hit_suite;
+  __u16 *hit_suite_id;
+
+  tlv = (tlv_head*) data;
+  hit_suite = (tlv_hit_suite*) data;
+  hit_suite_id = &hit_suite->hit_suite_id;
+  hit_suite->type = htons((__u16)PARAM_HIT_SUITE_LIST);
+
+  for (i = 0; (i < HIT_SUITE_4BIT_MAX) && (hit_suites[i] > 0); i++, len++)
+  {
+    *hit_suite_id = htons(hit_suites[i]);
+    hit_suite_id++;
+  }
+
+  tlv->length = htons((__u16)len);
+  len = eight_byte_align(len*2 + 4);
+  return(len);
+}
+
 /*
  * Returns number of bytes that it advances
  * Transforms is a pointer to an array of transforms to include.
@@ -1993,9 +2004,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
   tlv_head *tlv;
   tlv_hip_cipher *hip_cipher;
   tlv_esp_transform *esp_trans;
-  tlv_hit_suite     *hit_suite_trans;
-  __u16 array_max = PARAM_HIP_CIPHER? HIP_CIPHER_MAX :
-                    (PARAM_HIT_SUITE_LIST? HIT_SUITE_8BIT_MAX : ESP_MAX);
+  __u16 array_max = PARAM_HIP_CIPHER? HIP_CIPHER_MAX : ESP_MAX;
   __u16 *transform_id;
 
   tlv = (tlv_head*) data;
@@ -2006,10 +2015,6 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
       hip_cipher = (tlv_hip_cipher*) data;
       transform_id = &hip_cipher->cipher_id;
     }
-  else if(type == PARAM_HIT_SUITE_LIST){
-    hit_suite_trans = (tlv_hit_suite*) data;
-    transform_id = &hit_suite_trans->hit_suite_id;
-  }
   else           /* PARAM_ESP_TRANSFORM */
     {
       esp_trans = (tlv_esp_transform*) data;
@@ -2273,8 +2278,8 @@ int build_tlv_cert(__u8 *buff)
 int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
 {
   /* HIP sig */
-  SHA_CTX c;
-  unsigned char md[SHA_DIGEST_LENGTH] = {0};
+  SHA256_CTX c;
+  unsigned char md[SHA256_DIGEST_LENGTH] = {0};
   DSA_SIG *dsa_sig;
   tlv_hip_sig *sig;
   unsigned int sig_len = 0;
@@ -2292,9 +2297,9 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
     }
 
   /* calculate SHA1 hash of the HIP message */
-  SHA1_Init(&c);
-  SHA1_Update(&c, data, location);
-  SHA1_Final(md, &c);
+  SHA256_Init(&c);
+  SHA256_Update(&c, data, location);
+  SHA256_Final(md, &c);
 
   /* build tlv header */
   sig = (tlv_hip_sig*) &data[location];
@@ -2311,7 +2316,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
       memset(sig->signature, 0, sig_len);
       sig->signature[0] = 8; /* T */
       /* calculate the DSA signature of the message hash */
-      dsa_sig = DSA_do_sign(md, SHA_DIGEST_LENGTH, hi->dsa);
+      dsa_sig = DSA_do_sign(md, SHA256_DIGEST_LENGTH, hi->dsa);
       /* build signature from DSA_SIG struct */
       bn2bin_safe(dsa_sig->r, &sig->signature[1], 20);
       bn2bin_safe(dsa_sig->s, &sig->signature[21], 20);
@@ -2325,7 +2330,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
        */
       sig_len = RSA_size(hi->rsa);
       memset(sig->signature, 0, sig_len);
-      err = RSA_sign(NID_sha1, md, SHA_DIGEST_LENGTH, sig->signature,
+      err = RSA_sign(NID_sha1, md, SHA256_DIGEST_LENGTH, sig->signature,
                      &sig_len, hi->rsa);
       if (!err)
         {
@@ -2341,7 +2346,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
   if (!R1 || (D_VERBOSE == OPT.debug_R1))
     {
       log_(NORM, "SHA1: ");
-      print_hex(md, SHA_DIGEST_LENGTH);
+      print_hex(md, SHA256_DIGEST_LENGTH);
       log_(NORM, "\nSignature: ");
       print_hex(sig->signature, sig_len);
       log_(NORM, "\n");
@@ -2369,24 +2374,14 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
   memset(hmac_md, 0, sizeof(hmac_md));
   hmac_md_len = EVP_MAX_MD_SIZE;
 
-  switch (hip_a->hip_transform)
+  switch (hip_a->hit_suite)
     {
-    case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-    case ESP_NULL_HMAC_SHA1:
-      HMAC(   EVP_sha1(),
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
-              data, location,
-              hmac_md, &hmac_md_len  );
-      break;
-    case ESP_3DES_CBC_HMAC_MD5:
-    case ESP_NULL_HMAC_MD5:
-      HMAC(   EVP_md5(),
-              get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
+              auth_key_len_hit_suite(hip_a->hit_suite),
               data, location,
               hmac_md, &hmac_md_len  );
       break;

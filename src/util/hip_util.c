@@ -890,6 +890,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->hi->anonymous    = my_host_id->anonymous;
   hip_a->hi->allow_incoming = my_host_id->allow_incoming;
   hip_a->hi->skip_addrcheck = my_host_id->skip_addrcheck;
+  hip_a->hi->hit_suite_id  = my_host_id->hit_suite_id;
   strncpy(hip_a->hi->name, my_host_id->name, sizeof(hip_a->hi->name));
   hip_a->hi->name_len = my_host_id->name_len;
   memset(&hip_a->hi->addrs, 0, sizeof(sockaddr_list));
@@ -919,6 +920,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
           hip_a->peer_hi->rvs_cond = stored_hi->rvs_cond;
           hip_a->peer_hi->rvs_count = stored_hi->rvs_count;
           hip_a->peer_hi->rvs_addrs = stored_hi->rvs_addrs;
+          hip_a->peer_hi->hit_suite_id = stored_hi->hit_suite_id;
           if (stored_hi->copies == NULL)
             {
               stored_hi->copies = malloc(sizeof(int));
