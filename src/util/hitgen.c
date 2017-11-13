@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -85,6 +85,7 @@ typedef struct _hi_options {
   int bitsize;
   char anon;
   char incoming;
+  char hit_suite_id;
   __u64 r1count;
   char *name;
 } hi_options;
@@ -171,6 +172,8 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   xmlNewProp(hi, BAD_CAST "length", BAD_CAST tmp);
   xmlNewProp(hi, BAD_CAST "anon", BAD_CAST (yesno(opts->anon)));
   xmlNewProp(hi, BAD_CAST "incoming", BAD_CAST (yesno(opts->incoming)));
+  sprintf(tmp, "%d", opts->hit_suite_id);
+  xmlNewProp(hi, BAD_CAST "hit_suite_id", BAD_CAST tmp);
   if (opts->r1count > 0)
     {
       sprintf(tmp, "%llu", opts->r1count);
@@ -215,6 +218,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 
   hostid.algorithm_id = opts->type;
   hostid.size = (opts->bitsize) / 8;
+  hostid.hit_suite_id = opts->hit_suite_id;
   hostid.rsa = rsa;
   hostid.dsa = dsa;
 
@@ -373,6 +377,7 @@ void publish_hits(char *out_filename)
               (strcmp((char *)attr->name, "alg_id") == 0) ||
               (strcmp((char *)attr->name, "anon") == 0) ||
               (strcmp((char *)attr->name, "incoming") == 0) ||
+              (strcmp((char *)attr->name, "hit_suite_id") == 0) ||
               (strcmp((char *)attr->name, "length") == 0))
             {
               xmlNewProp(hi, BAD_CAST attr->name,
@@ -575,6 +580,7 @@ int main(int argc, char *argv[])
   opts.anon = 0;
   opts.incoming = 1;
   opts.r1count = 10;
+  opts.hit_suite_id = 1;
   opts.name = name;
 
   /*
@@ -721,7 +727,7 @@ int main(int argc, char *argv[])
   if (!access(confname, R_OK))
     {
       doc = xmlParseFile(confname);
-      if (doc) 
+      if (doc)
         {
           root_node = xmlDocGetRootElement(doc);
           for (node = root_node ? root_node->children : NULL; node;

@@ -70,15 +70,15 @@
 #ifdef __WIN32__
 #define IN6_ARE_ADDR_EQUAL IN6_ADDR_EQUAL
 #define IS_HIT(x) (((ntohs(((struct in6_addr*)x)->s6_words[0]) & 0xFFFF) \
-                    == ((HIT_PREFIX_SHA1_32BITS >> 4) & 0xFFFF)) && \
+                    == ((HIT_PREFIX_32BITS >> 4) & 0xFFFF)) && \
                    ((ntohs(((struct in6_addr*)x)->s6_words[1]) & 0xFFF0) \
-                    == ((HIT_PREFIX_SHA1_32BITS & 0xFFFF))))
+                    == ((HIT_PREFIX_32BITS & 0xFFFF))))
 #elif defined (__MACOSX__)
 #define IS_HIT(x) ((ntohl(((struct in6_addr*)x)->__u6_addr.__u6_addr32[0]) \
-                    & 0xFFFFFFF0L) == HIT_PREFIX_SHA1_32BITS)
+                    & 0xFFFFFFF0L) == HIT_PREFIX_32BITS)
 #else /* Linux */
 #define IS_HIT(x) ((ntohl(((struct in6_addr*)x)->s6_addr32[0]) & 0xFFFFFFF0L) \
-                   == HIT_PREFIX_SHA1_32BITS)
+                   == HIT_PREFIX_32BITS)
 #endif
 #define SA2IP6(x) (&((struct sockaddr_in6*)x)->sin6_addr)
 

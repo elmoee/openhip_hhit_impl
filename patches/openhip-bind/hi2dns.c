@@ -161,6 +161,9 @@ void parse_xml_attributes(xmlAttrPtr attr, hi_node *hi)
 				hi->allow_incoming = 1;
 			else
 				hi->allow_incoming = 0;
+		} else if (strcmp((char *)attr->name, "hit_suite_id")==0) {
+			sscanf(value, "%d", &tmp);
+			hi->hit_suite_id = (char)tmp;
 		} else if (strcmp((char *)attr->name, "r1count")==0) {
 			sscanf(value, "%llu", &hi->r1_gen_count);
 		} else if (strcmp((char *)attr->name, "addrcheck")==0) {

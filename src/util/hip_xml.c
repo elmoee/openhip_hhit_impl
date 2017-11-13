@@ -203,6 +203,11 @@ void parse_xml_attributes(xmlAttrPtr attr, hi_node *hi)
               hi->allow_incoming = 0;
             }
         }
+      else if (strcmp((char *)attr->name, "hit_suite_id") == 0)
+        {
+          sscanf(value, "%d", &tmp);
+          hi->hit_suite_id = (char)tmp;
+        }
       else if (strcmp((char *)attr->name, "r1count") == 0)
         {
           sscanf(value, "%llu", &hi->r1_gen_count);
@@ -749,6 +754,8 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
   xmlNewProp(hi, BAD_CAST "length", BAD_CAST tmp);
   xmlNewProp(hi, BAD_CAST "anon", BAD_CAST (yesno(h->anonymous)));
   xmlNewProp(hi, BAD_CAST "incoming", BAD_CAST(yesno(h->allow_incoming)));
+  sprintf(tmp, "%d", h->hit_suite_id);
+  xmlNewProp(hi, BAD_CAST "hit_suite_id", BAD_CAST tmp);
   if (h->skip_addrcheck)
     {
       xmlNewProp(hi, BAD_CAST "addrcheck", BAD_CAST("no"));

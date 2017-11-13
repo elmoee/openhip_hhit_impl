@@ -209,8 +209,8 @@ typedef enum {
 
 /* Host Identity Tag is 128 bits long */
 #define HIT_SIZE 16
-/* The below prefix applies to the uppermost 28 bits only (RFC 4843) */
-#define HIT_PREFIX_SHA1_32BITS 0x20010010
+/* The below prefix applies to the uppermost 28 bits only (RFC 7343) */
+#define HIT_PREFIX_32BITS 0x20010020
 /* convert lower 24-bits of HIT to LSI */
 #define HIT2LSI(a) (ntohl((((struct sockaddr_in *)(&HCNF.lsi_prefix))->sin_addr.s_addr)) | \
                     ((a[HIT_SIZE - 3] << 16) + \
@@ -482,6 +482,7 @@ typedef struct _hi_node {
   __u32 update_id;              /* this host's Update ID		*/
   /* Options */
   char algorithm_id;
+  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
@@ -496,6 +497,7 @@ struct peer_node
   int size;       /* Size in bytes of the Host Identity   */
   __u64 r1_gen_count;
   char algorithm_id;
+  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
