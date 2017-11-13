@@ -206,12 +206,13 @@ typedef enum {
 } HIT_SUITES_8BIT;
 
 /* SADB algorithms */
-#define SADB_EALG_3DESCBC 3
-#define SADB_X_EALG_BLOWFISHCBC 7
-#define SADB_EALG_NULL 11
-#define SADB_X_EALG_AESCBC 12
-#define SADB_AALG_MD5HMAC 2
-#define SADB_AALG_SHA1HMAC 3
+#define SADB_EALG_3DESCBC         3
+#define SADB_AALG_MD5HMAC         2
+#define SADB_AALG_SHA1HMAC        3
+#define SADB_X_AALG_SHA2_256HMAC  5
+#define SADB_X_EALG_BLOWFISHCBC   7
+#define SADB_EALG_NULL            11
+#define SADB_X_EALG_AESCBC        12
 
 /* HI Domain Identifier types */
 typedef enum {
@@ -249,6 +250,7 @@ typedef enum {
   KEY_LEN_NULL = 0,             /* RFC 2410 */
   KEY_LEN_MD5 = 16,             /* 128 bits per RFC 2403 */
   KEY_LEN_SHA1 = 20,            /* 160 bits per RFC 2404 */
+  KEY_LEN_SHA256 = 32,          /* 256 bits per RFC 4868 */
   KEY_LEN_3DES = 24,            /* 192 bits (3x64-bit keys) RFC 2451 */
   KEY_LEN_AES128 = 16,          /* 128 bits per RFC 3686; also 192, 256-bits */
   KEY_LEN_AES256 = 32,          /* 256 bits */
