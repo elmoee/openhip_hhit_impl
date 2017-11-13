@@ -154,21 +154,29 @@ typedef enum {
 /* Supported transforms are compressed into a bitmask... */
 /* Default HIP transforms proposed when none are specified in config */
 #define DEFAULT_HIP_TRANS \
-  ((1 << ESP_AES256_CBC_HMAC_SHA1) | \
-   (1 << ESP_AES128_CBC_HMAC_SHA1) | \
-   (1 << ESP_3DES_CBC_HMAC_SHA1) | \
-   (1 << ESP_3DES_CBC_HMAC_MD5) | \
-   (1 << ESP_BLOWFISH_CBC_HMAC_SHA1) | \
-   (1 << ESP_NULL_HMAC_SHA1))
+  ((1 << ESP_AES128_CBC_HMAC_SHA1) | \
+   (1 << ESP_NULL_HMAC_SHA256) | \
+   (1 << ESP_AES128_CBC_HMAC_SHA256) | \
+   (1 << ESP_AES256_CBC_HMAC_SHA256) | \
+   (1 << ESP_AES_CCM_8) | \
+   (1 << ESP_AES_CCM_16) | \ 
+   (1 << ESP_AES_GCM_ICV_8) | \ 
+   (1 << ESP_AES_GCM_ICV_16) | \ 
+   (1 << ESP_AES_CMAC_96) | \ 
+   (1 << ESP_AES_GMAC))
 /* Default ESP transforms proposed when none are specified in config */
 #define ESP_OFFSET 8
 #define DEFAULT_ESP_TRANS \
-  ((1 << (ESP_OFFSET + ESP_AES256_CBC_HMAC_SHA1)) | \
-   (1 << (ESP_OFFSET + ESP_AES128_CBC_HMAC_SHA1)) | \
-   (1 << (ESP_OFFSET + ESP_3DES_CBC_HMAC_SHA1)) | \
-   (1 << (ESP_OFFSET + ESP_3DES_CBC_HMAC_MD5)) | \
-   (1 << (ESP_OFFSET + ESP_BLOWFISH_CBC_HMAC_SHA1)) | \
-   (1 << (ESP_OFFSET + ESP_NULL_HMAC_SHA1)))
+  ((1 << (ESP_OFFSET + ESP_AES128_CBC_HMAC_SHA1)) | \
+   (1 << (ESP_OFFSET + ESP_NULL_HMAC_SHA256)) | \
+   (1 << (ESP_OFFSET + ESP_AES128_CBC_HMAC_SHA256)) | \
+   (1 << (ESP_OFFSET + ESP_AES256_CBC_HMAC_SHA256)) | \
+   (1 << (ESP_OFFSET + ESP_AES_CCM_8)) | \
+   (1 << (ESP_OFFSET + ESP_AES_CCM_16)) | \ 
+   (1 << (ESP_OFFSET + ESP_AES_GCM_ICV_8)) | \ 
+   (1 << (ESP_OFFSET + ESP_AES_GCM_ICV_16)) | \ 
+   (1 << (ESP_OFFSET + ESP_AES_CMAC_96)) | \ 
+   (1 << (ESP_OFFSET + ESP_AES_GMAC)))
 
 /* HI (signature) algorithms  */
 typedef enum {
