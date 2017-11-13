@@ -134,13 +134,21 @@ typedef enum {
 typedef enum {
   RESERVED,                             /* 0 */
   ESP_AES128_CBC_HMAC_SHA1,             /* 1 */
-  ESP_3DES_CBC_HMAC_SHA1,               /* 2 */
-  ESP_3DES_CBC_HMAC_MD5,                /* 3 */
-  ESP_BLOWFISH_CBC_HMAC_SHA1,           /* 4 */
-  ESP_NULL_HMAC_SHA1,                   /* 5 */
-  ESP_NULL_HMAC_MD5,                    /* 6 */
-  ESP_AES256_CBC_HMAC_SHA1,             /* 7 */
-  SUITE_ID_MAX,                         /* 8 */
+  DEPRECATED,                           /* 2 */
+  DEPRECATED,                           /* 3 */
+  DEPRECATED,                           /* 4 */
+  DEPRECATED,                           /* 5 */
+  DEPRECATED,                           /* 6 */
+  ESP_NULL_HMAC_SHA256,                 /* 7 */
+  ESP_AES128_CBC_HMAC_SHA256,           /* 8 */
+  ESP_AES256_CBC_HMAC_SHA256,           /* 9 */
+  ESP_AES_CCM_8,                        /* 10 */
+  ESP_AES_CCM_16,                       /* 11 */
+  ESP_AES_GCM_ICV_8,                    /* 12 */
+  ESP_AES_GCM_ICV_16,                   /* 13 */
+  ESP_AES_CMAC_96,                      /* 14 */
+  ESP_AES_GMAC,                         /* 15 */
+  SUITE_ID_MAX,                         /* 16 */
 } SUITE_IDS;
 #define ENCR_NULL(a) ((a == ESP_NULL_HMAC_SHA1) || \
                       (a == ESP_NULL_HMAC_MD5))
