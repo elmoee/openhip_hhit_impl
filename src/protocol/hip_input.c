@@ -1307,7 +1307,14 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
               switch (hip_a->hip_transform)
                 {
                 case ESP_AES128_CBC_HMAC_SHA1:
-                case ESP_AES256_CBC_HMAC_SHA1:
+                case ESP_AES128_CBC_HMAC_SHA256:
+                case ESP_AES256_CBC_HMAC_SHA256:
+                case ESP_AES_CCM_8:
+                case ESP_AES_CCM_16:
+                case ESP_AES_GCM_ICV_8:
+                case ESP_AES_GCM_ICV_16:
+                case ESP_AES_CMAC_96:
+                case ESP_AES_GMAC:
                   log_(NORM, "AES decryption key: 0x");
                   print_hex(key, key_len);
                   log_(NORM, "\n");
@@ -1330,6 +1337,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                                   cbc_iv,
                                   AES_DECRYPT);
                   break;
+                /* DEPRECATED 
                 case ESP_3DES_CBC_HMAC_SHA1:
                 case ESP_3DES_CBC_HMAC_MD5:
                   memcpy(&secret_key1, key, key_len / 3);
@@ -1382,6 +1390,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                     cbc_iv,
                     DES_DECRYPT);
                   break;
+                */ 
+                /* DEPRECATED 
                 case ESP_BLOWFISH_CBC_HMAC_SHA1:
                   log_(NORM, "BLOWFISH decryption key: ");
                   log_(NORM, "0x");
@@ -1397,6 +1407,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                                  cbc_iv,
                                  BF_DECRYPT);
                   break;
+                */
                 default:
                   log_(WARN, "Unsupported transform ");
                   log_(NORM, "for decryption\n");
@@ -3899,15 +3910,20 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
   switch (type)
     {
     case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-    case ESP_NULL_HMAC_SHA1:
       HMAC(   EVP_sha1(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
       break;
+    case ESP_NULL_HMAC_SHA256:
+    case ESP_AES128_CBC_HMAC_SHA256:
+    case ESP_AES256_CBC_HMAC_SHA256:
+      HMAC(   EVP_sha256(),
+              key, key_len,
+              data, data_len,
+              hmac_md, &hmac_md_len);
+      break;
+    /* DEPRECATED 
     case ESP_3DES_CBC_HMAC_MD5:
     case ESP_NULL_HMAC_MD5:
       HMAC(   EVP_md5(),
@@ -3915,6 +3931,10 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
       break;
+      */
+      /* in case someone tries to use unsupported mac/signature algorithm */
+    default:
+      return(-1);
     }
   /*
    * note that hmac_md_len may be < hmac_len,
