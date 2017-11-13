@@ -142,12 +142,12 @@ typedef enum {
   ESP_NULL_HMAC_SHA256,                 /* 7 */
   ESP_AES128_CBC_HMAC_SHA256,           /* 8 */
   ESP_AES256_CBC_HMAC_SHA256,           /* 9 */
-  ESP_AES_CCM_8,                        /* 10 */
-  ESP_AES_CCM_16,                       /* 11 */
-  ESP_AES_GCM_ICV_8,                    /* 12 */
-  ESP_AES_GCM_ICV_16,                   /* 13 */
-  ESP_AES_CMAC_96,                      /* 14 */
-  ESP_AES_GMAC,                         /* 15 */
+  ESP_AES_CCM_8,                        /* 10 ( not fully implmented yet ) */
+  ESP_AES_CCM_16,                       /* 11 ( not fully implmented yet ) */
+  ESP_AES_GCM_ICV_8,                    /* 12 ( not fully implmented yet ) */
+  ESP_AES_GCM_ICV_16,                   /* 13 ( not fully implmented yet ) */
+  ESP_AES_CMAC_96,                      /* 14 ( not fully implmented yet ) */
+  ESP_AES_GMAC,                         /* 15 ( not fully implmented yet ) */
   SUITE_ID_MAX,                         /* 16 */
 } SUITE_IDS;
 #define ENCR_NULL(a) ((a == ESP_NULL_HMAC_SHA256))
