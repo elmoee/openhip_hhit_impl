@@ -150,8 +150,7 @@ typedef enum {
   ESP_AES_GMAC,                         /* 15 */
   SUITE_ID_MAX,                         /* 16 */
 } SUITE_IDS;
-#define ENCR_NULL(a) ((a == ESP_NULL_HMAC_SHA1) || \
-                      (a == ESP_NULL_HMAC_MD5))
+#define ENCR_NULL(a) ((a == ESP_NULL_HMAC_SHA256))
 /* Supported transforms are compressed into a bitmask... */
 /* Default HIP transforms proposed when none are specified in config */
 #define DEFAULT_HIP_TRANS \
