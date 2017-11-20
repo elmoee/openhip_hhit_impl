@@ -459,10 +459,12 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* encrypted(host_id) */
   __u16 data_len, iv_len;
+  /* DEPRECATED
   des_key_schedule ks1, ks2, ks3;
   u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
-  unsigned char *key;
   BF_KEY bfkey;
+  */
+  unsigned char *key;
   AES_KEY aes_key;
   /*
    * initialization vector used as a randomizing block which is

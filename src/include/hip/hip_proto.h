@@ -159,10 +159,10 @@ typedef enum {
    (1 << ESP_AES128_CBC_HMAC_SHA256) | \
    (1 << ESP_AES256_CBC_HMAC_SHA256) | \
    (1 << ESP_AES_CCM_8) | \
-   (1 << ESP_AES_CCM_16) | \ 
-   (1 << ESP_AES_GCM_ICV_8) | \ 
-   (1 << ESP_AES_GCM_ICV_16) | \ 
-   (1 << ESP_AES_CMAC_96) | \ 
+   (1 << ESP_AES_CCM_16) | \
+   (1 << ESP_AES_GCM_ICV_8) | \
+   (1 << ESP_AES_GCM_ICV_16) | \
+   (1 << ESP_AES_CMAC_96) | \
    (1 << ESP_AES_GMAC))
 /* Default ESP transforms proposed when none are specified in config */
 #define ESP_OFFSET 8
@@ -172,10 +172,10 @@ typedef enum {
    (1 << (ESP_OFFSET + ESP_AES128_CBC_HMAC_SHA256)) | \
    (1 << (ESP_OFFSET + ESP_AES256_CBC_HMAC_SHA256)) | \
    (1 << (ESP_OFFSET + ESP_AES_CCM_8)) | \
-   (1 << (ESP_OFFSET + ESP_AES_CCM_16)) | \ 
-   (1 << (ESP_OFFSET + ESP_AES_GCM_ICV_8)) | \ 
-   (1 << (ESP_OFFSET + ESP_AES_GCM_ICV_16)) | \ 
-   (1 << (ESP_OFFSET + ESP_AES_CMAC_96)) | \ 
+   (1 << (ESP_OFFSET + ESP_AES_CCM_16)) | \
+   (1 << (ESP_OFFSET + ESP_AES_GCM_ICV_8)) | \
+   (1 << (ESP_OFFSET + ESP_AES_GCM_ICV_16)) | \
+   (1 << (ESP_OFFSET + ESP_AES_CMAC_96)) | \
    (1 << (ESP_OFFSET + ESP_AES_GMAC)))
 
 /* HI (signature) algorithms  */

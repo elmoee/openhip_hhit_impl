@@ -1019,10 +1019,12 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   unsigned char *dh_secret_key;
   dh_cache_entry *dh_entry = NULL;
   unsigned char *key, *enc_data = NULL, *unenc_data = NULL;
+  AES_KEY aes_key;
+  /* DEPRECATED
   des_key_schedule ks1, ks2, ks3;
   BF_KEY bfkey;
-  AES_KEY aes_key;
   u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
+  */
   unsigned char cbc_iv[16];
   int got_dh = 0, comp_keys = 0, status;
   __u8 valid_cert = FALSE;
