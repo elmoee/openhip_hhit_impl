@@ -1473,7 +1473,7 @@ I2_ERROR:
           hiph->hdr_len = (len / 8) - 1;
           log_(NORM, "HMAC verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
-          hip_a->hit_suite = hip_a->hi->algorithm_id;
+          hip_a->hit_suite = hip_a->hi->hit_suite_id;
           if (validate_hmac(data, len,
                             hmac, length,
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
@@ -1867,7 +1867,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
           log_(NORM, "HMAC_2 verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
           if (validate_hmac(data, len,
-                            hmac, 20,
+                            hmac, htons(hmac_tlv_tmp.length),
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
                             hip_a->hit_suite))
             {
@@ -3864,9 +3864,10 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
                   __u8 *key, int type)
 {
+  log_(WARN, "validate hmac: %d \n", type);
   unsigned char hmac_md[EVP_MAX_MD_SIZE] = {0};
   unsigned int hmac_md_len = EVP_MAX_MD_SIZE;
-  int key_len = auth_key_len(type);
+  int key_len = auth_key_len_hit_suite(type);
 
   switch (type)
   {
@@ -3894,12 +3895,12 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
    */
   /* compare lower bits of received HMAC versus calculated HMAC
    * for MD5, this is the lower 128 bits; for SHA-1 it's 160-bits */
+  log_(WARN, "computed hmac: (%d) ", hmac_len);
   if ((memcmp(&hmac[hmac_len - hmac_md_len], hmac_md,
               hmac_md_len) == 0))
   {
     return(0);
   }
-  log_(WARN, "computed hmac: (%d) ", hmac_md_len);
   print_hex(hmac_md, hmac_md_len);
   log_(NORM, "\n    received hmac: (%d) ", hmac_len);
   print_hex(hmac, hmac_len);
@@ -4840,10 +4841,10 @@ int check_tlv_length(int type, int length)
     case PARAM_PUZZLE:
       return(length == 12);
     case PARAM_SOLUTION:
-      return(length == 4+SHA256_DIGEST_LENGTH/4);
+      return(length == 20);
     case PARAM_HMAC:
     case PARAM_HMAC_2:
-      return(length == 32);
+      return(length == 64);
     case PARAM_SEQ:
       return(length == 4);
     /* not checking variable length */

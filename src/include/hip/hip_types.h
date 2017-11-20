@@ -715,7 +715,7 @@ typedef struct _tlv_hmac
 {
   __u16 type;
   __u16 length;
-  __u8 hmac[32];
+  __u8 hmac[64];
 } tlv_hmac;
 
 typedef struct _tlv_hip_sig

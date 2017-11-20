@@ -540,7 +540,7 @@ int hip_send_I2(hip_assoc *hip_a)
   /* puzzle solution */
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
-  sol->length = htons(4 + SHA256_DIGEST_LENGTH/4);
+  sol->length = htons(20); //TODO: change to new standard
   memcpy(&sol->cookie, &cookie, sizeof(hipcookie));
   if ((err = solve_puzzle(&cookie, &solution,
                           &hip_a->hi->hit, &hip_a->peer_hi->hit)) < 0)
@@ -2397,6 +2397,7 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
   hmac = (tlv_hmac*)  &data[location];
   hmac->type = htons((__u16)type);
   hmac->length = htons(sizeof(tlv_hmac) - 4);
+  log_(NORM, "HMAC length=%d\n", sizeof(tlv_hmac));
 
   /* get lower 160-bits of HMAC computation */
   memcpy( hmac->hmac,
