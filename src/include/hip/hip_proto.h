@@ -134,11 +134,11 @@ typedef enum {
 typedef enum {
   RESERVED,                             /* 0 */
   ESP_AES128_CBC_HMAC_SHA1,             /* 1 */
-  DEPRECATED,                           /* 2 */
-  DEPRECATED,                           /* 3 */
-  DEPRECATED,                           /* 4 */
-  DEPRECATED,                           /* 5 */
-  DEPRECATED,                           /* 6 */
+  DEPRECATED_ESP_3DES_CBC_HMAC_SHA1,    /* 2 ( no longer supported, RFC7402 ) */
+  DEPRECATED_ESP_3DES_CBC_HMAC_MD5,     /* 3 ( no longer supported, RFC7402 ) */
+  DEPRECATED_ESP_BLOWFISH_CBC_HMAC_SHA1,/* 4 ( no longer supported, RFC7402 ) */
+  DEPRECATED_ESP_NULL_HMAC_SHA1,        /* 5 ( no longer supported, RFC7402 ) */
+  DEPRECATED_ESP_NULL_HMAC_MD5,         /* 6 ( no longer supported, RFC7402 ) */
   ESP_NULL_HMAC_SHA256,                 /* 7 */
   ESP_AES128_CBC_HMAC_SHA256,           /* 8 */
   ESP_AES256_CBC_HMAC_SHA256,           /* 9 */
