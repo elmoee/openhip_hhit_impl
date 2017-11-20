@@ -605,13 +605,13 @@ int hip_send_I2(hip_assoc *hip_a)
 
   switch (hip_a->hip_transform)
     {
-    case ESP_NULL_HMAC_SHA1:
-    case ESP_NULL_HMAC_MD5:
+    case ESP_NULL_HMAC_SHA256:
       /* don't send an IV with NULL encryption, copy data */
       memcpy(enc->iv, unenc_data, data_len);
       break;
     case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
+    case ESP_AES128_CBC_HMAC_SHA256:
+    case ESP_AES256_CBC_HMAC_SHA256:
       /* do AES CBC encryption */
       key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
       len = enc_key_len(hip_a->hip_transform);
@@ -632,11 +632,12 @@ int hip_send_I2(hip_assoc *hip_a)
                       cbc_iv, AES_ENCRYPT);
       memcpy(enc->iv + iv_len, enc_data, data_len);
       break;
+    /* DEPRECATED
     case ESP_3DES_CBC_HMAC_SHA1:
     case ESP_3DES_CBC_HMAC_MD5:
-      /* do 3DES PCBC encryption */
-      /* Get HIP Initiator key and draw out three keys from that */
-      /* Assumes key is 24 bytes for now */
+      //do 3DES PCBC encryption
+      //Get HIP Initiator key and draw out three keys from that
+      //Assumes key is 24 bytes for now
       key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
       len = 8;
       if (len < DES_KEY_SZ)
@@ -688,6 +689,9 @@ int hip_send_I2(hip_assoc *hip_a)
                            DES_ENCRYPT);
       memcpy(enc->iv + iv_len, enc_data, data_len);
       break;
+    */
+
+    /* DEPRECATED 
     case ESP_BLOWFISH_CBC_HMAC_SHA1:
       key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
       len = enc_key_len(hip_a->hip_transform);
@@ -700,6 +704,7 @@ int hip_send_I2(hip_assoc *hip_a)
                      &bfkey, cbc_iv, BF_ENCRYPT);
       memcpy(enc->enc_data, enc_data, data_len);
       break;
+      */
     }
   /* this is type + length + reserved + iv + data_len */
   location += 4 + 4 + iv_len + data_len;
@@ -1345,16 +1350,22 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
   switch (hip_a->hip_transform)
     {
     case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-    case ESP_NULL_HMAC_SHA1:
       HMAC(   EVP_sha1(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
               auth_key_len(hip_a->hip_transform),
               (__u8 *)&ticket->hmac_key_index, length_to_hmac,
               hmac_md, &hmac_md_len  );
       break;
+    case ESP_AES128_CBC_HMAC_SHA256:
+    case ESP_AES256_CBC_HMAC_SHA256:
+    case ESP_NULL_HMAC_SHA256:
+      HMAC(   EVP_sha256(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len(hip_a->hip_transform),
+              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
+              hmac_md, &hmac_md_len  );
+      break;
+      /* DEPRECATED
     case ESP_3DES_CBC_HMAC_MD5:
     case ESP_NULL_HMAC_MD5:
       HMAC(   EVP_md5(),
@@ -1363,6 +1374,7 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
               (__u8 *)&ticket->hmac_key_index, length_to_hmac,
               hmac_md, &hmac_md_len  );
       break;
+      */
     default:
       return(0);
       break;
@@ -2402,16 +2414,22 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
   switch (hip_a->hip_transform)
     {
     case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES256_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-    case ESP_NULL_HMAC_SHA1:
       HMAC(   EVP_sha1(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
               auth_key_len(hip_a->hip_transform),
               data, location,
               hmac_md, &hmac_md_len  );
       break;
+    case ESP_AES128_CBC_HMAC_SHA256:
+    case ESP_AES256_CBC_HMAC_SHA256:
+    case ESP_NULL_HMAC_SHA256:
+      HMAC(   EVP_sha256(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len(hip_a->hip_transform),
+              data, location,
+              hmac_md, &hmac_md_len  );
+      break;
+      /* DEPRECATED
     case ESP_3DES_CBC_HMAC_MD5:
     case ESP_NULL_HMAC_MD5:
       HMAC(   EVP_md5(),
@@ -2420,6 +2438,7 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
               data, location,
               hmac_md, &hmac_md_len  );
       break;
+      */
     default:
       return(0);
       break;
