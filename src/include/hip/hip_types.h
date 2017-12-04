@@ -362,7 +362,7 @@ typedef struct _hip_assoc {
   __u16 hip_cipher;
   __u16 hip_transform;
   __u16 esp_transform;
-  __u16 hit_suite;
+  __u8 hit_suite;
   __u16 available_transforms;       /* bit mask used to flag available xfrms */
   __u8 dh_group_id;
   EVP_PKEY *evp_dh;
@@ -619,7 +619,7 @@ typedef struct _tlv_hit_suite
 {
   __u16 type;
   __u16 length;
-  __u16 hit_suite_id;
+  __u8 hit_suite_id;
 } tlv_hit_suite;
 
 typedef struct _tlv_esp_transform
@@ -893,7 +893,7 @@ struct hip_conf {
   __u16 esp_transforms[ESP_MAX];       /* ESP transforms proposed in R1 */
   __u16 hip_transforms[ESP_MAX];       /* HIP transforms proposed in R1 */
   __u16 hip_ciphers[HIP_CIPHER_MAX];
-  __u16 hit_suite_list[HIT_SUITE_4BIT_MAX];
+  __u8 hit_suite_list[HIT_SUITE_4BIT_MAX];
   char *log_filename;                   /* non-default pathname for log	     */
   struct sockaddr_storage dht_server;       /* address+port of DHT server    */
   struct sockaddr_storage dns_server;       /* address of server w/HIP RRs   */

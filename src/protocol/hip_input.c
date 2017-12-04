@@ -124,7 +124,7 @@ int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
 int handle_dh_groups(__u8 *dh_group_id, int length, bool is_responder);
 
 
-int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length);
+int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length);
 
 /*
  *
@@ -949,7 +949,7 @@ restore_saved_peer_hi:
   return(-1);
 }
 
-int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length) {
+int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length) {
   for(int i = 0; i < length; i++, id++){
     if(htons(*id) == hip_a->hi->hit_suite_id){
       hip_a -> hit_suite = htons(*id);

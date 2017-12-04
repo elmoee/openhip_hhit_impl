@@ -85,7 +85,7 @@ int hip_check_bind(struct sockaddr *src, int num_attempts);
 int build_tlv_dh_group_list ( __u8 *data );
 int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
-int build_tlv_hit_suite(__u8 *data, __u16 *hit_suites);
+int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
@@ -1970,12 +1970,12 @@ int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
   return(len);
 }
 
-int build_tlv_hit_suite(__u8 *data, __u16 *hit_suites)
+int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites)
 {
   int i, len = 0;
   tlv_head *tlv;
   tlv_hit_suite *hit_suite;
-  __u16 *hit_suite_id;
+  __u8 *hit_suite_id;
 
   tlv = (tlv_head*) data;
   hit_suite = (tlv_hit_suite*) data;
