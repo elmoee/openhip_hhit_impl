@@ -1894,7 +1894,7 @@ int build_tlv_dh_group_list ( __u8 *data ){
   int i, len = 0;
   tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) data ;
   dhGroupList -> type =  htons(PARAM_DH_GROUP_LIST);
-  __u8 *group_ids = &dhGroupList->group_ids;
+  __u8 *group_id = &dhGroupList->group_id;
   __u8 current_group_id;
 
   for (i = 0; (i < DH_MAX); i++)
@@ -1902,8 +1902,8 @@ int build_tlv_dh_group_list ( __u8 *data ){
     current_group_id = HCNF.dh_group_list[i];
     if(current_group_id > 0){
       len++;
-      *group_ids = current_group_id;
-      group_ids++;
+      *group_id = current_group_id;
+      group_id++;
     }
   }
   dhGroupList -> length = htons((__u16) len);

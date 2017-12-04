@@ -121,7 +121,7 @@ int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime);
 int delete_reg_info(struct reg_entry *regs, __u8 type);
 int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
     __u8* address);
-int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder);
+int handle_dh_groups(__u8 *dh_group_id, int length, bool is_responder);
 
 
 int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length);
@@ -358,7 +358,7 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
           
                 tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
           
-                if ((handle_dh_groups(&dhGroupList->group_ids, length, true)) < 0)
+                if ((handle_dh_groups(&dhGroupList->group_id, length, true)) < 0)
                 {
                   hip_send_notify(
                       hip_a,
@@ -909,7 +909,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         }
         else if(type == PARAM_DH_GROUP_LIST){
           tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
-          if ((handle_dh_groups(&dhGroupList->group_ids, length, false)) < 0)
+          if ((handle_dh_groups(&dhGroupList->group_id, length, false)) < 0)
           {
             hip_send_notify(
                 hip_a,

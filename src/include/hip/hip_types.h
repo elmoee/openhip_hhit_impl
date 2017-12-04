@@ -596,7 +596,7 @@ typedef	struct	_tlv_dh_group_list
 {
     __u16	type;
     __u16	length;
-    __u8	group_ids;
+    __u8	group_id;
 } tlv_dh_group_list;
 
 typedef struct _tlv_diffie_hellman
