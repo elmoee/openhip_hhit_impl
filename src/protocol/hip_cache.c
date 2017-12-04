@@ -390,7 +390,7 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
   entry->is_current = TRUE;
   entry->ref_count  = 0;
 
-  if(group_id >=6 && group_id <= 10) {
+  if(ec_curve_nid[group_id]) { // check if eliptic curve diffie-hellman
     EC_GROUP *ec_group;
     EC_KEY   *ec_key = EC_KEY_new();
     ec_group = EC_GROUP_new_by_curve_name(ec_curve_nid[group_id]);
