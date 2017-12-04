@@ -273,7 +273,7 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
   tlv_from *from;
   unsigned char *rvs_hmac;
 
-  hiphdr *hiph = (hiphdr*) &data[location];
+  hiphdr *hiph = (hiphdr*) data;
   memcpy(hiti, hiph->hit_sndr, sizeof(hip_hit));       /* Initiator's HIT */
   memcpy(hitr, hiph->hit_rcvr, sizeof(hip_hit));       /* Responder's HIT */
   data_len = location + ((hiph->hdr_len + 1) * 8);
