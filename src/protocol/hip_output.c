@@ -557,7 +557,6 @@ int hip_send_I2(hip_assoc *hip_a)
   log_(NORM, "solution: 0x%llx\n",solution);
 
   /* now that we have the solution, we can compute the keymat */
-  hip_a -> hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
   compute_keys(hip_a);
   esp_info->keymat_index = htons((__u16)hip_a->keymat_index);
 
