@@ -315,7 +315,6 @@ hipcookie *generate_cookie();
 void replace_next_R1(__u8 dh_group);
 int compute_R1_cache_index(hip_hit *hiti, __u8 current);
 int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry);
-void init_dh_cache();
 dh_cache_entry *new_dh_cache_entry(__u8 group_id);
 dh_cache_entry *get_dh_entry(__u8 group_id, int new);
 void unuse_dh_entry(EVP_PKEY *evp_dh);

@@ -514,7 +514,6 @@ int main_loop(int argc, char **argv)
   hip_mr_set_external_ifs();
 #endif /* !__WIN32__ */
   /* Precompute R1s, cookies, DH material */
-  init_dh_cache();
   init_all_R1_caches();
   gettimeofday(&time1, NULL);
   last_expire = time1.tv_sec;

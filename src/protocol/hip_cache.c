@@ -370,22 +370,6 @@ int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry)
  */
 
 /*
- * init_dh_cache()
- *
- * Initialize the Diffie-Hellman cache
- * Add a single DH entry for the default configured group ID.
- */
-void init_dh_cache()
-{
-  /* only called with empty cache */
-  if (dh_cache)
-    {
-      return;
-    }
-  //dh_cache = new_dh_cache_entry(HCNF.dh_group); // TODO: remove
-}
-
-/*
  * new_dh_cache_entry()
  *
  * in:		group_id = the DH group for the new entry
