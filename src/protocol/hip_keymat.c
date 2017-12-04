@@ -143,27 +143,9 @@ void compute_keys(hip_assoc *hip_a)
 }
 
 void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
-  //SHA_CTX c;
-  SHA256_CTX c_256;
-  /*SHA512_CTX c_384;
 
-  switch(hip_a->hit_suite){
-    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
-      SHA1_Init(&c);
-      SHA1_Update(&c, hashdata, location);
-      SHA1_Final(hash, &c);
-      break;
-    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
-      SHA256_Init(&c_256);
-      SHA256_Update(&c_256, hashdata, location);
-      SHA256_Final(hash, &c_256);
-      break;
-    case HIT_SUITE_4BIT_ECDSA_SHA384:
-      SHA384_Init(&c_384);
-      SHA384_Update(&c_384, hashdata, location);
-      SHA384_Final(hash, &c_384);
-      break;
-  }*/
+  SHA256_CTX c_256;
+
   SHA256_Init(&c_256);
   SHA256_Update(&c_256, hashdata, location);
   SHA256_Final(hash, &c_256);
