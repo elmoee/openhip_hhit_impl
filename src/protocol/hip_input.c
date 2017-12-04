@@ -5248,18 +5248,18 @@ int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
 }
 
 int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
-    __u8 *dh_group_packet;
+    __u8 *dh_group_list;
     __u8 dh_group_id;
     __u16 available_group_id;
   
   
     if(is_responder){
-      dh_group_packet = HCNF.dh_group_list;
+      dh_group_list = HCNF.dh_group_list;
       available_group_id = conf_dh_group_ids_to_mask(dh_group_ids,length);
       length = DH_MAX-1;
     } else{
   
-      dh_group_packet =  dh_group_ids;
+      dh_group_list =  dh_group_ids;
       available_group_id = conf_dh_group_ids_to_mask(HCNF.dh_group_list, DH_MAX-1);
     }
   
@@ -5272,10 +5272,10 @@ int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
       /* continue to read the group ids... */
     }
   
-    for (int i = 0; (i < length); dh_group_packet++,
+    for (int i = 0; (i < length); dh_group_list++,
         i++)
     {
-      dh_group_id = *dh_group_packet;
+      dh_group_id = *dh_group_list;
       if ((dh_group_id <= DH_RESERVED) ||
           (dh_group_id >= DH_MAX))
       {
