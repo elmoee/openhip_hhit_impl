@@ -789,7 +789,6 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
                             NULL, 0);
             return(-1);
           }
-          //hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
         }
       else if (type == PARAM_ESP_TRANSFORM)
         {
@@ -953,7 +952,7 @@ restore_saved_peer_hi:
 int handle_hit_suite_list(hip_assoc *hip_a, __u16 *id, __u16 length) {
   for(int i = 0; i < length; i++, id++){
     if(htons(*id) == hip_a->hi->hit_suite_id){
-      hip_a -> hit_suite = hip_a->peer_hi->hit_suite_id;
+      hip_a -> hit_suite = htons(*id);
       return(0);
     }
   }
