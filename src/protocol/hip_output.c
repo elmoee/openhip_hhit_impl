@@ -540,7 +540,7 @@ int hip_send_I2(hip_assoc *hip_a)
   /* puzzle solution */
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
-  sol->length = htons(20); //TODO: change to new standard
+  sol->length = htons(20); //TODO: change to new standard ISSUE Puzzle/Solution length(R1, I2)
   memcpy(&sol->cookie, &cookie, sizeof(hipcookie));
   if ((err = solve_puzzle(&cookie, &solution,
                           &hip_a->hi->hit, &hip_a->peer_hi->hit)) < 0)
