@@ -168,12 +168,15 @@ void hip_handle_multihoming_timeouts(struct timeval *now);
 /* hip_keymat.c */
 int set_secret_key(unsigned char *key, hip_assoc *hip_a);
 unsigned char *get_key(hip_assoc *hip_a, int type, int peer);
+void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location);
+int auth_key_len_hit_suite(int suite_id);
 void compute_keys(hip_assoc *hip_a);
 int compute_keymat(hip_assoc *hip_a);
 int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index);
 int draw_mr_key(hip_assoc *hip_a, int keymat_index);
 int auth_key_len(int suite_id);
 int enc_key_len(int suite_id);
+int enc_key_len_hip_cipher(int hip_cipher_id);
 int enc_iv_len(int suite_id);
 int transform_to_ealg(int transform);
 int transform_to_aalg(int transform);
@@ -184,6 +187,7 @@ int save_identities_file(int);
 int read_conf_file(char *);
 int read_reg_file(void);
 __u16 conf_transforms_to_mask();
+__u16 conf_dh_group_ids_to_mask(__u8* dh_group_list, int length);
 hi_node *create_new_hi_node();
 void append_hi_node(hi_node **head, hi_node *append);
 int add_peer_hit(hip_hit peer_hit, struct sockaddr *peer_addr);
@@ -255,7 +259,7 @@ void log_(int level, char *fmt, ...);
 char *logaddr(struct sockaddr *addr);
 void logdsa(DSA *dsa);
 void logrsa(RSA *rsa);
-void logdh(DH *dh);
+void logdh(EVP_PKEY *evp_dh);
 void logbn(BIGNUM *bn);
 int bn2bin_safe(const BIGNUM *a, unsigned char *to, int len);
 void log_hipa_fromto(int level, char *msg,  hip_assoc *hip_a,__u8 from,__u8 to);
@@ -306,16 +310,15 @@ int add_other_addresses_to_hi(hi_node *hi, int mine);
 
 /* hip_cache.c */
 void init_all_R1_caches();
-void init_R1_cache(hi_node *hi);
+void init_R1_cache(hi_node *hi, __u8 dh_group);
 hipcookie *generate_cookie();
-void replace_next_R1();
+void replace_next_R1(__u8 dh_group);
 int compute_R1_cache_index(hip_hit *hiti, __u8 current);
-int calculate_r1_length(hi_node *hi);
-void init_dh_cache();
+int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry);
 dh_cache_entry *new_dh_cache_entry(__u8 group_id);
 dh_cache_entry *get_dh_entry(__u8 group_id, int new);
-void unuse_dh_entry(DH *dh);
-void expire_old_dh_entries();
+void unuse_dh_entry(EVP_PKEY *evp_dh);
+void expire_old_dh_entries(__u8 dh_group);
 
 /* hip_status.c */
 int hip_status_open();

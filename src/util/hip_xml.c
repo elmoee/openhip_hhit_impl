@@ -1126,8 +1126,8 @@ int read_conf_file(char *filename)
             }
           /* search child for <id> and store into HCNF global
            * t is the number of transforms we've found */
-          memset(trns, 0, sizeof(__u16) * SUITE_ID_MAX);
-          for (t = 0; child && (t < SUITE_ID_MAX);
+          memset(trns, 0, sizeof(__u16) * ESP_MAX);
+          for (t = 0; child && (t < ESP_MAX);
                child = child->next)
             {
               data2 = (char*) xmlNodeGetContent(child);

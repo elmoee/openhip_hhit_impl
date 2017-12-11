@@ -72,6 +72,7 @@
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
+#include <openssl/x509.h>
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -81,8 +82,10 @@
  * Forward declaration of local functions.
  */
 int hip_check_bind(struct sockaddr *src, int num_attempts);
-int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug);
+int build_tlv_dh_group_list ( __u8 *data );
+int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug);
 int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single);
+int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
@@ -114,7 +117,7 @@ extern void del_divert_rule(int);
  */
 int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
 {
-  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac)];
+  __u8 buff[sizeof(hiphdr) + sizeof(tlv_from) + 4 + sizeof(tlv_hmac) + sizeof(tlv_dh_group_list) + DH_MAX];
   struct sockaddr *src, *dst;
   hiphdr *hiph;
   int location = 0, do_retrans;
@@ -157,7 +160,6 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
       hiph->hdr_len = (location / 8) - 1;
       location += build_tlv_hmac(hip_a, buff, location,
                                  PARAM_RVS_HMAC);
-
       hiph->hdr_len = (location / 8) - 1;
 
       /* send the packet */
@@ -215,6 +217,8 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
         }
 
       location = sizeof(hiphdr);
+      location += build_tlv_dh_group_list(&buff[location]);
+      hiph->hdr_len = (location / 8) - 1;
       log_(NORMT, "Sending HIP_I1 packet (%d bytes)...\n", location);
       do_retrans = TRUE;
     }
@@ -252,7 +256,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
 
   /* make a copy of a pre-computed R1 from the cache */
   i = compute_R1_cache_index(hiti, TRUE);
-  r1_entry = &hi->r1_cache[i];
+  r1_entry = &hi->r1_cache[HCNF.dh_group][i];
   total_len = r1_entry->len;
   log_(NORM,"Using premade R1 from %s cache slot %d.\n", hi->name, i);
 
@@ -386,17 +390,22 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   /* Diffie Hellman */
   location += build_tlv_dh(&data[location], dh_entry->group_id,
-                           dh_entry->dh, OPT.debug_R1);
+                           dh_entry->evp_dh, OPT.debug_R1);
+
+  location += build_tlv_dh_group_list(&data[location]);
+  hiph->hdr_len = (location / 8) - 1;
 
   /* HIP transform */
   location += build_tlv_transform(&data[location],
-                                  PARAM_HIP_TRANSFORM,
-                                  HCNF.hip_transforms,
+                                  PARAM_HIP_CIPHER,
+                                  HCNF.hip_ciphers,
                                   0);
 
   /* host_id */
   location += build_tlv_hostid(&data[location], hi, HCNF.send_hi_name);
 
+  location += build_tlv_hit_suite(&data[location],
+                                  HCNF.hit_suite_list);
   /* certificate */
   location += build_tlv_cert(&data[location]);
 
@@ -413,15 +422,13 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   /* hip_signature_2 - receiver's HIT and checksum zeroed */
   hiph->hdr_len = (location / 8) - 1;
+
   location += build_tlv_signature(hi, data, location, TRUE);
-
   hiph->hdr_len = (location / 8) - 1;
-
   /* insert the cookie (OPAQUE and I) */
   memcpy(&data[cookie_location], cookie, sizeof(hipcookie));
 
   /* if ECHO_REQUEST_NOSIG is needed, put it here */
-
 
   return(location);
 }
@@ -445,7 +452,7 @@ int hip_send_I2(hip_assoc *hip_a)
   __u8 buff[sizeof(hiphdr)            + sizeof(tlv_esp_info) +
             sizeof(tlv_r1_counter)    +
             sizeof(tlv_solution)      + sizeof(tlv_diffie_hellman) +
-            DH_MAX_LEN                + sizeof(tlv_hip_transform) + 2 +
+            DH_MAX_LEN                + sizeof(tlv_hip_cipher) + 2 +
             sizeof(tlv_esp_transform) + sizeof(tlv_encrypted) +
             sizeof(tlv_host_id)       + 1 + DSA_PRIV +
             3 * (MAX_HI_BITS / 8)         + MAX_HI_NAMESIZE +
@@ -459,11 +466,6 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* encrypted(host_id) */
   __u16 data_len, iv_len;
-  /* DEPRECATED
-  des_key_schedule ks1, ks2, ks3;
-  u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
-  BF_KEY bfkey;
-  */
   unsigned char *key;
   AES_KEY aes_key;
   /*
@@ -487,7 +489,7 @@ int hip_send_I2(hip_assoc *hip_a)
   src = HIPA_SRC(hip_a);
   dst = HIPA_DST(hip_a);
 
-  if (!ENCR_NULL(hip_a->hip_transform))
+  if (!ENCR_NULL(hip_a->hip_cipher))
     {
       RAND_bytes(cbc_iv, sizeof(cbc_iv));
     }
@@ -538,7 +540,7 @@ int hip_send_I2(hip_assoc *hip_a)
   /* puzzle solution */
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
-  sol->length = htons(sizeof(tlv_solution) - 4);
+  sol->length = htons(20); //TODO: change to new standard
   memcpy(&sol->cookie, &cookie, sizeof(hipcookie));
   if ((err = solve_puzzle(&cookie, &solution,
                           &hip_a->hi->hit, &hip_a->peer_hi->hit)) < 0)
@@ -560,19 +562,19 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* diffie_hellman */
   location += build_tlv_dh(&buff[location], hip_a->dh_group_id,
-                           hip_a->dh, OPT.debug);
+                           hip_a->evp_dh, OPT.debug);
 
   /* hip transform */
   location += build_tlv_transform(&buff[location],
-                                  PARAM_HIP_TRANSFORM,
+                                  PARAM_HIP_CIPHER,
                                   zero16,
-                                  hip_a->hip_transform);
+                                  hip_a->hip_cipher);
 
   /* encrypted(host_id) */
   enc = (tlv_encrypted*) &buff[location];
   enc->type = htons(PARAM_ENCRYPTED);
   memset(enc->reserved, 0, sizeof(enc->reserved));
-  iv_len = enc_iv_len(hip_a->hip_transform);
+  iv_len = enc_iv_len(hip_a->hip_cipher);
 
   /* inner padding is 8-byte aligned */
   data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
@@ -605,18 +607,17 @@ int hip_send_I2(hip_assoc *hip_a)
          (data_len - hi_location),         /* fill with pad length */
          (data_len - hi_location));
 
-  switch (hip_a->hip_transform)
+  switch (hip_a->hip_cipher)
     {
-    case ESP_NULL_HMAC_SHA256:
+    case HIP_CIPHER_NULL_ENCRYPT:
       /* don't send an IV with NULL encryption, copy data */
       memcpy(enc->iv, unenc_data, data_len);
       break;
-    case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES128_CBC_HMAC_SHA256:
-    case ESP_AES256_CBC_HMAC_SHA256:
+    case HIP_CIPHER_AES128_CBC:
+    case HIP_CIPHER_AES256_CBC:
       /* do AES CBC encryption */
       key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len(hip_a->hip_transform);
+      len = enc_key_len_hip_cipher(hip_a->hip_cipher);
       log_(NORM, "AES encryption key: 0x");
       print_hex(key, len);
       log_(NORM, "\n");
@@ -634,79 +635,6 @@ int hip_send_I2(hip_assoc *hip_a)
                       cbc_iv, AES_ENCRYPT);
       memcpy(enc->iv + iv_len, enc_data, data_len);
       break;
-    /* DEPRECATED
-    case ESP_3DES_CBC_HMAC_SHA1:
-    case ESP_3DES_CBC_HMAC_MD5:
-      //do 3DES PCBC encryption
-      //Get HIP Initiator key and draw out three keys from that
-      //Assumes key is 24 bytes for now
-      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = 8;
-      if (len < DES_KEY_SZ)
-        {
-          log_(WARN, "short key!");
-        }
-      memcpy(&secret_key1, key, len);
-      memcpy(&secret_key2, key + 8, len);
-      memcpy(&secret_key3, key + 16, len);
-
-      des_set_odd_parity((des_cblock *)&secret_key1);
-      des_set_odd_parity((des_cblock *)&secret_key2);
-      des_set_odd_parity((des_cblock *)&secret_key3);
-      log_(NORM, "3-DES encryption key: 0x");
-      print_hex(secret_key1, len);
-      log_(NORM, "-");
-      print_hex(secret_key2, len);
-      log_(NORM, "-");
-      print_hex(secret_key3, len);
-      log_(NORM, "\n");
-
-      if (((err = des_set_key_checked((
-                                        (des_cblock *)&
-                                        secret_key1),
-                                      ks1)) != 0) ||
-          ((err = des_set_key_checked((
-                                        (des_cblock *)&
-                                        secret_key2),
-                                      ks2)) != 0) ||
-          ((err = des_set_key_checked((
-                                        (des_cblock *)&
-                                        secret_key3),
-                                      ks3)) != 0))
-        {
-          log_(WARN, "Unable to use calculated DH secret for ");
-          log_(NORM, "3DES key (%d)\n", err);
-          free(unenc_data);
-          free(enc_data);
-          return(-1);
-        }
-      log_(NORM, "Encrypting %d bytes using 3-DES.\n", data_len);
-      des_ede3_cbc_encrypt(unenc_data,
-                           enc_data,
-                           data_len,
-                           ks1,
-                           ks2,
-                           ks3,
-                           (des_cblock*)cbc_iv,
-                           DES_ENCRYPT);
-      memcpy(enc->iv + iv_len, enc_data, data_len);
-      break;
-    */
-
-    /* DEPRECATED 
-    case ESP_BLOWFISH_CBC_HMAC_SHA1:
-      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len(hip_a->hip_transform);
-      log_(NORM, "BLOWFISH encryption key: 0x");
-      print_hex(key, len);
-      log_(NORM, "\n");
-      BF_set_key(&bfkey, len, key);
-      log_(NORM, "Encrypting %d bytes using BLOWFISH.\n", data_len);
-      BF_cbc_encrypt(unenc_data, enc_data, data_len,
-                     &bfkey, cbc_iv, BF_ENCRYPT);
-      memcpy(enc->enc_data, enc_data, data_len);
-      break;
-      */
     }
   /* this is type + length + reserved + iv + data_len */
   location += 4 + 4 + iv_len + data_len;
@@ -1349,34 +1277,18 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
                    sizeof(ticket->action) +
                    sizeof(ticket->lifetime);
 
-  switch (hip_a->hip_transform)
+  switch (hip_a->hit_suite)
     {
-    case ESP_AES128_CBC_HMAC_SHA1:
-      HMAC(   EVP_sha1(),
-              get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
-              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
-              hmac_md, &hmac_md_len  );
-      break;
-    case ESP_AES128_CBC_HMAC_SHA256:
-    case ESP_AES256_CBC_HMAC_SHA256:
-    case ESP_NULL_HMAC_SHA256:
+    // case HIT_SUITE_4BIT_ECDSA_LOW_SHA1: Not implemented
+    // case HIT_SUITE_4BIT_ECDSA_SHA384: Not implemented
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
               auth_key_len(hip_a->hip_transform),
               (__u8 *)&ticket->hmac_key_index, length_to_hmac,
               hmac_md, &hmac_md_len  );
       break;
-      /* DEPRECATED
-    case ESP_3DES_CBC_HMAC_MD5:
-    case ESP_NULL_HMAC_MD5:
-      HMAC(   EVP_md5(),
-              get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
-              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
-              hmac_md, &hmac_md_len  );
-      break;
-      */
+    
     default:
       return(0);
       break;
@@ -1977,6 +1889,29 @@ int hip_check_bind(struct sockaddr *src, int num_attempts)
   return(ret);
 }
 
+
+int build_tlv_dh_group_list ( __u8 *data ){
+  int i, len = 0;
+  tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) data ;
+  dhGroupList -> type =  htons(PARAM_DH_GROUP_LIST);
+  __u8 *group_id = &dhGroupList->group_id;
+  __u8 current_group_id;
+
+  for (i = 0; (i < DH_MAX); i++)
+  {
+    current_group_id = HCNF.dh_group_list[i];
+    if(current_group_id > 0){
+      len++;
+      *group_id = current_group_id;
+      group_id++;
+    }
+  }
+  dhGroupList -> length = htons((__u16) len);
+
+  len += 4; /*size of header*/
+  return eight_byte_align(len);
+}
+
 /*****************************************
  *        Resource Record Builders       *
  *****************************************/
@@ -1988,13 +1923,13 @@ int hip_check_bind(struct sockaddr *src, int num_attempts)
  * and when parsing the R1 for the DH in I2.
  * Returns the number of bytes that it advances.
  */
-int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
+int build_tlv_dh(__u8 *data, __u8 group_id, EVP_PKEY *evp_dh, int debug)
 {
   tlv_diffie_hellman *d;
-  unsigned char *bin;
+  unsigned char *bin, *p;
   int len;
 
-  if (dh == NULL)
+  if (evp_dh == NULL)
     {
       log_(WARN, "No Diffie Hellman context for DH tlv.\n");
       return(0);
@@ -2005,14 +1940,16 @@ int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
   d->group_id =  group_id;
 
   /* put dh->pub_key into tlv */
-  len = dhprime_len[group_id];
+  len = i2d_PUBKEY(evp_dh, NULL);
+
   bin = (unsigned char*) malloc(len);
+  p = bin;
   if (!bin)
     {
       log_(WARN, "malloc error - generating Diffie Hellman\n");
       return(0);
     }
-  len = bn2bin_safe(dh->pub_key, bin, len);
+  len = i2d_PUBKEY(evp_dh, &p);
   memcpy(d->pub, bin, len);
 
   d->pub_len = ntohs((__u16)len);
@@ -2022,14 +1959,37 @@ int build_tlv_dh(__u8 *data, __u8 group_id, DH *dh, int debug)
   if (D_VERBOSE == debug)
     {
       log_(NORM, "Using DH public value of len %d: 0x", len);
-      print_hex(bin, len);
       log_(NORM, "\n");
     }
 #endif
   free(bin);
+  //free(p);
 
   len += 5;       /* tlv hdr + group_id + pub */
   len = eight_byte_align(len);
+  return(len);
+}
+
+int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites)
+{
+  int i, len = 0;
+  tlv_head *tlv;
+  tlv_hit_suite *hit_suite;
+  __u8 *hit_suite_id;
+
+  tlv = (tlv_head*) data;
+  hit_suite = (tlv_hit_suite*) data;
+  hit_suite_id = &hit_suite->hit_suite_id;
+  hit_suite->type = htons((__u16)PARAM_HIT_SUITE_LIST);
+
+  for (i = 0; (i < HIT_SUITE_4BIT_MAX) && (hit_suites[i] > 0); i++, len++)
+  {
+    *hit_suite_id = hit_suites[i];
+    hit_suite_id++;
+  }
+
+  tlv->length = htons((__u16)len);
+  len = eight_byte_align(len*2 + 4);
   return(len);
 }
 
@@ -2042,17 +2002,18 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
 {
   int i, len = 0;
   tlv_head *tlv;
-  tlv_hip_transform *hip_trans;
+  tlv_hip_cipher *hip_cipher;
   tlv_esp_transform *esp_trans;
+  __u16 array_max = PARAM_HIP_CIPHER? HIP_CIPHER_MAX : ESP_MAX;
   __u16 *transform_id;
 
   tlv = (tlv_head*) data;
   tlv->type = htons((__u16)type);
   len += 4;       /* advance for type, length */
-  if (type == PARAM_HIP_TRANSFORM)
+  if (type == PARAM_HIP_CIPHER)
     {
-      hip_trans = (tlv_hip_transform*) data;
-      transform_id = &hip_trans->transform_id;
+      hip_cipher = (tlv_hip_cipher*) data;
+      transform_id = &hip_cipher->cipher_id;
     }
   else           /* PARAM_ESP_TRANSFORM */
     {
@@ -2069,7 +2030,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
     }
   else
     {
-      for (i = 0; (i < SUITE_ID_MAX) && (transforms[i] > 0); i++)
+      for (i = 0; (i < array_max) && (transforms[i] > 0); i++)
         {
           len += 2;
           *transform_id = htons(transforms[i]);
@@ -2317,8 +2278,8 @@ int build_tlv_cert(__u8 *buff)
 int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
 {
   /* HIP sig */
-  SHA_CTX c;
-  unsigned char md[SHA_DIGEST_LENGTH] = {0};
+  SHA256_CTX c;
+  unsigned char md[SHA256_DIGEST_LENGTH] = {0};
   DSA_SIG *dsa_sig;
   tlv_hip_sig *sig;
   unsigned int sig_len = 0;
@@ -2336,9 +2297,9 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
     }
 
   /* calculate SHA1 hash of the HIP message */
-  SHA1_Init(&c);
-  SHA1_Update(&c, data, location);
-  SHA1_Final(md, &c);
+  SHA256_Init(&c);
+  SHA256_Update(&c, data, location);
+  SHA256_Final(md, &c);
 
   /* build tlv header */
   sig = (tlv_hip_sig*) &data[location];
@@ -2355,7 +2316,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
       memset(sig->signature, 0, sig_len);
       sig->signature[0] = 8; /* T */
       /* calculate the DSA signature of the message hash */
-      dsa_sig = DSA_do_sign(md, SHA_DIGEST_LENGTH, hi->dsa);
+      dsa_sig = DSA_do_sign(md, SHA256_DIGEST_LENGTH, hi->dsa);
       /* build signature from DSA_SIG struct */
       bn2bin_safe(dsa_sig->r, &sig->signature[1], 20);
       bn2bin_safe(dsa_sig->s, &sig->signature[21], 20);
@@ -2369,7 +2330,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
        */
       sig_len = RSA_size(hi->rsa);
       memset(sig->signature, 0, sig_len);
-      err = RSA_sign(NID_sha1, md, SHA_DIGEST_LENGTH, sig->signature,
+      err = RSA_sign(NID_sha1, md, SHA256_DIGEST_LENGTH, sig->signature,
                      &sig_len, hi->rsa);
       if (!err)
         {
@@ -2385,7 +2346,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
   if (!R1 || (D_VERBOSE == OPT.debug_R1))
     {
       log_(NORM, "SHA1: ");
-      print_hex(md, SHA_DIGEST_LENGTH);
+      print_hex(md, SHA256_DIGEST_LENGTH);
       log_(NORM, "\nSignature: ");
       print_hex(sig->signature, sig_len);
       log_(NORM, "\n");
@@ -2413,34 +2374,17 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
   memset(hmac_md, 0, sizeof(hmac_md));
   hmac_md_len = EVP_MAX_MD_SIZE;
 
-  switch (hip_a->hip_transform)
+  switch (hip_a->hit_suite)
     {
-    case ESP_AES128_CBC_HMAC_SHA1:
-      HMAC(   EVP_sha1(),
-              get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
-              data, location,
-              hmac_md, &hmac_md_len  );
-      break;
-    case ESP_AES128_CBC_HMAC_SHA256:
-    case ESP_AES256_CBC_HMAC_SHA256:
-    case ESP_NULL_HMAC_SHA256:
+    //  case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:  Not implemented
+    //  case HIT_SUITE_4BIT_ECDSA_SHA384: Not implemented
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
+              auth_key_len_hit_suite(hip_a->hit_suite),
               data, location,
               hmac_md, &hmac_md_len  );
       break;
-      /* DEPRECATED
-    case ESP_3DES_CBC_HMAC_MD5:
-    case ESP_NULL_HMAC_MD5:
-      HMAC(   EVP_md5(),
-              get_key(hip_a, HIP_INTEGRITY, FALSE),
-              auth_key_len(hip_a->hip_transform),
-              data, location,
-              hmac_md, &hmac_md_len  );
-      break;
-      */
     default:
       return(0);
       break;
@@ -2453,6 +2397,7 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
   hmac = (tlv_hmac*)  &data[location];
   hmac->type = htons((__u16)type);
   hmac->length = htons(sizeof(tlv_hmac) - 4);
+  log_(NORM, "HMAC length=%d\n", sizeof(tlv_hmac));
 
   /* get lower 160-bits of HMAC computation */
   memcpy( hmac->hmac,
@@ -2725,7 +2670,7 @@ int build_rekey(hip_assoc *hip_a)
       dh_entry->ref_count++;
       hip_a->rekey->keymat_index = 0;
       hip_a->rekey->dh_group_id = new_group_id;
-      hip_a->rekey->dh = dh_entry->dh;
+      hip_a->rekey->dh = dh_entry->evp_dh;
     }
 
   gettimeofday(&hip_a->rekey->rk_time, NULL);

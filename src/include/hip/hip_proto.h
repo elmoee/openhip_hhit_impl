@@ -94,16 +94,18 @@ typedef enum {
 
 /* HIP TLV parameters */
 #define PARAM_ESP_INFO                  65
-#define PARAM_R1_COUNTER                128
+#define PARAM_R1_COUNTER                129
 #define PARAM_LOCATOR                   193
 #define PARAM_PUZZLE                    257
 #define PARAM_SOLUTION                  321
 #define PARAM_SEQ                       385
 #define PARAM_ACK                       449
+#define	PARAM_DH_GROUP_LIST	            511
 #define PARAM_DIFFIE_HELLMAN            513
-#define PARAM_HIP_TRANSFORM             577
+#define PARAM_HIP_CIPHER                579
 #define PARAM_ENCRYPTED                 641
 #define PARAM_HOST_ID                   705
+#define PARAM_HIT_SUITE_LIST            715
 #define PARAM_CERT                      768
 #define PARAM_PROXY_TICKET              812
 #define PARAM_AUTH_TICKET               822
@@ -148,9 +150,36 @@ typedef enum {
   ESP_AES_GCM_ICV_16,                   /* 13 ( not fully implmented yet ) */
   ESP_AES_CMAC_96,                      /* 14 ( not fully implmented yet ) */
   ESP_AES_GMAC,                         /* 15 ( not fully implmented yet ) */
-  SUITE_ID_MAX,                         /* 16 */
+  ESP_MAX,                         /* 16 */
 } SUITE_IDS;
-#define ENCR_NULL(a) ((a == ESP_NULL_HMAC_SHA256))
+
+typedef enum {
+  HIP_CIPHER_RESERVED,                  /* 0 */
+  HIP_CIPHER_NULL_ENCRYPT,              /* 1 */
+  HIP_CIPHER_AES128_CBC,                /* 2 */
+  HIP_CIPHER_RESERVED_2,                /* 3 */
+  HIP_CIPHER_AES256_CBC,                /* 4 */
+  HIP_CIPHER_MAX,                       /* 5 */
+} CIPHER_IDS;
+
+/* HIT suites (8 bit encoding) */
+typedef enum {
+  HIT_SUITE_8BIT_RESERVED = 0x00,
+  HIT_SUITE_8BIT_RSA_DSA_SHA256 = 0x10,
+  HIT_SUITE_8BIT_ECDSA_SHA384 = 0x20,
+  HIT_SUITE_8BIT_ECDSA_LOW_SHA1 = 0x30,
+} HIT_SUITES_8BIT;
+
+/* HIT suites (4 bit encoding) */
+typedef enum {
+  HIT_SUITE_4BIT_RESERVED,
+  HIT_SUITE_4BIT_RSA_DSA_SHA256,
+  HIT_SUITE_4BIT_ECDSA_SHA384,
+  HIT_SUITE_4BIT_ECDSA_LOW_SHA1,
+  HIT_SUITE_4BIT_MAX,
+} HIT_SUITES_4BIT;
+
+#define ENCR_NULL(a) (a == HIP_CIPHER_NULL_ENCRYPT)
 /* Supported transforms are compressed into a bitmask... */
 /* Default HIP transforms proposed when none are specified in config */
 #define DEFAULT_HIP_TRANS \
@@ -187,23 +216,6 @@ typedef enum {
 #define HIP_RSA_DFT_EXP RSA_F4 /* 0x10001L = 65537; 3 and 17 are also common */
 #define HI_TYPESTR(a)  ((a == HI_ALG_DSA) ? "DSA" : \
                         (a == HI_ALG_RSA) ? "RSA" : "UNKNOWN")
-
-/* HIT suite IDs (4 bit OGA ID)  */
-typedef enum {
-  HIT_SUITE_4BIT_RESERVED = 0,
-  HIT_SUITE_4BIT_RSA_DSA_SHA256 = 1,
-  HIT_SUITE_4BIT_ECDSA_SHA384 = 2,
-  HIT_SUITE_4BIT_ECDSA_LOW_SHA1 = 3,
-} HIT_SUITES_4BIT;
-
-
-/* HIT suites (8 bit encoding) */
-typedef enum {
-  HIT_SUITE_8BIT_RESERVED = 0x00,
-  HIT_SUITE_8BIT_RSA_DSA_SHA256 = 0x10,
-  HIT_SUITE_8BIT_ECDSA_SHA384 = 0x20,
-  HIT_SUITE_8BIT_ECDSA_LOW_SHA1 = 0x30,
-} HIT_SUITES_8BIT;
 
 /* SADB algorithms */
 #define SADB_EALG_3DESCBC         3
@@ -250,7 +262,8 @@ typedef enum {
   KEY_LEN_NULL = 0,             /* RFC 2410 */
   KEY_LEN_MD5 = 16,             /* 128 bits per RFC 2403 */
   KEY_LEN_SHA1 = 20,            /* 160 bits per RFC 2404 */
-  KEY_LEN_SHA256 = 32,          /* 256 bits per RFC 4868 */
+  KEY_LEN_SHA256 = 32,
+  KEY_LEN_SHA384 = 48,
   KEY_LEN_3DES = 24,            /* 192 bits (3x64-bit keys) RFC 2451 */
   KEY_LEN_AES128 = 16,          /* 128 bits per RFC 3686; also 192, 256-bits */
   KEY_LEN_AES256 = 32,          /* 256 bits */
@@ -260,18 +273,24 @@ typedef enum {
 /* Diffie-Hellman Group IDs */
 typedef enum {
   DH_RESERVED,
-  DH_384,
-  DH_OAKLEY_1,
+  DH_DEPRICATED1,
+  DH_DEPRECATED2,
   DH_MODP_1536,
   DH_MODP_3072,
-  DH_MODP_6144,
-  DH_MODP_8192,
+  DH_DEPRECATED3,
+  DH_DEPRECATED4,
+  DH_NIST_256,
+  DH_NIST_384,
+  DH_NIST_521,
+  DH_SECP160R1,
+  DH_MODP_2048,
   DH_MAX
 } DH_GROUP_IDS;
 /* choose default DH group here */
 #define DEFAULT_DH_GROUP_ID  DH_MODP_1536
-#define DH_MAX_LEN 1024
 
+//extern const __u8 DEFAULT_DH_GROUP_LIST[] = {DH_MODP_1536, DH_MODP_3072};
+#define DH_MAX_LEN 1024
 /*
  * HIP LOCATOR parameters
  */
@@ -290,9 +309,10 @@ typedef enum {
 #define NOTIFY_NO_DH_PROPOSAL_CHOSEN                     14
 #define NOTIFY_INVALID_DH_CHOSEN                         15
 #define NOTIFY_NO_HIP_PROPOSAL_CHOSEN                    16
-#define NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN              17
+#define NOTIFY_INVALID_HIP_CIPHER_CHOSEN                 17
 #define NOTIFY_NO_ESP_PROPOSAL_CHOSEN                    18
 #define NOTIFY_INVALID_ESP_TRANSFORM_CHOSEN              19
+#define NOTIFY_UNSUPPORTED_HIT_SUITE                     20
 #define NOTIFY_AUTHENTICATION_FAILED                     24
 #define NOTIFY_CHECKSUM_FAILED                           26
 #define NOTIFY_HMAC_FAILED                               28

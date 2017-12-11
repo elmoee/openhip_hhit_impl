@@ -85,6 +85,7 @@
 #endif
 
 #include <libxml/tree.h>
+#include <openssl/pem.h>
 
 #ifndef HITGEN
 
@@ -186,6 +187,26 @@ int add_addresses_from_dns(char *name, hi_node *hi)
 }
 
 #endif /* HITGEN */
+__u16 conf_dh_group_ids_to_mask(__u8* dh_group_list, int length)
+{
+  int i;
+  __u16 group_id, mask = 0;
+
+  for (i = 0; i < length; i++, dh_group_list++)
+  {
+    group_id = *dh_group_list;
+    if (!group_id)
+    {
+      break;
+    }
+    if ((group_id >= DH_RESERVED) && (group_id < DH_MAX)) {
+      mask |= (1 << group_id);
+    }
+  }
+
+  return(mask);
+}
+
 
 /*
  * conf_transforms_to_mask()
@@ -199,7 +220,7 @@ __u16 conf_transforms_to_mask()
   int i;
   __u16 transform, mask = 0;
 
-  for (i = 0; i < SUITE_ID_MAX; i++)
+  for (i = 0; i < ESP_MAX; i++)
     {
       transform = HCNF.hip_transforms[i];
       if (!transform)
@@ -208,7 +229,7 @@ __u16 conf_transforms_to_mask()
         }
       mask |= (1 << transform);
     }
-  for (i = 0; i < SUITE_ID_MAX; i++)
+  for (i = 0; i < ESP_MAX; i++)
     {
       transform = HCNF.esp_transforms[i];
       if (!transform)
@@ -869,6 +890,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->hi->anonymous    = my_host_id->anonymous;
   hip_a->hi->allow_incoming = my_host_id->allow_incoming;
   hip_a->hi->skip_addrcheck = my_host_id->skip_addrcheck;
+  hip_a->hi->hit_suite_id  = my_host_id->hit_suite_id;
   strncpy(hip_a->hi->name, my_host_id->name, sizeof(hip_a->hi->name));
   hip_a->hi->name_len = my_host_id->name_len;
   memset(&hip_a->hi->addrs, 0, sizeof(sockaddr_list));
@@ -898,6 +920,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
           hip_a->peer_hi->rvs_cond = stored_hi->rvs_cond;
           hip_a->peer_hi->rvs_count = stored_hi->rvs_count;
           hip_a->peer_hi->rvs_addrs = stored_hi->rvs_addrs;
+          hip_a->peer_hi->hit_suite_id = stored_hi->hit_suite_id;
           if (stored_hi->copies == NULL)
             {
               stored_hi->copies = malloc(sizeof(int));
@@ -932,7 +955,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->available_transforms = conf_transforms_to_mask();
   hip_a->dh_secret        = NULL;
   hip_a->dh_group_id      = HCNF.dh_group;
-  hip_a->dh               = NULL;
+  hip_a->evp_dh               = NULL;
   hip_a->peer_dh          = NULL;
   hip_a->keymat_index     = 0;
   memset(hip_a->keymat, 0, sizeof(hip_a->keymat));
@@ -1013,7 +1036,7 @@ int free_hip_assoc(hip_assoc *hip_a)
     {
       if (hip_a->peer_rekey->dh)
         {
-          DH_free(hip_a->peer_rekey->dh);
+          EVP_PKEY_free(hip_a->peer_rekey->dh);
         }
       free(hip_a->peer_rekey);
     }
@@ -1021,14 +1044,14 @@ int free_hip_assoc(hip_assoc *hip_a)
     {
       free(hip_a->mh);
     }
-  unuse_dh_entry(hip_a->dh);
+  unuse_dh_entry(hip_a->evp_dh);
   if (hip_a->peer_dh)
     {
-      DH_free(hip_a->peer_dh);
+      EVP_PKEY_free(hip_a->peer_dh);
     }
   if (hip_a->dh_secret)
     {
-      memset(hip_a->dh_secret, 0, DH_size(hip_a->dh));
+      memset(hip_a->dh_secret, 0, hip_a->dh_secret_len);
       free(hip_a->dh_secret);
     }
   /* erase any residual keying material, set ptrs to NULL  */
@@ -1149,7 +1172,7 @@ void replace_hip_assoc(hip_assoc *a_old, hip_assoc *a_new)
   a_old->hip_transform = a_new->hip_transform;
   a_old->esp_transform = a_new->esp_transform;
   a_old->dh_group_id = a_new->dh_group_id;
-  a_old->dh = a_new->dh;
+  a_old->evp_dh = a_new->evp_dh;
   a_old->peer_dh = a_new->peer_dh;
   a_old->dh_secret = a_new->dh_secret;
   a_old->keymat_index = a_new->keymat_index;
@@ -3253,7 +3276,7 @@ void logrsa(RSA *rsa)
   BIO_free(bp);
 }
 
-void logdh(DH *dh)
+void logdh(EVP_PKEY *evp_dh)
 {
   BIO *bp;
   FILE *fp;
@@ -3268,7 +3291,7 @@ void logdh(DH *dh)
     }
 
   bp = BIO_new_fp(fp, BIO_NOCLOSE);
-  DHparams_print(bp, dh);
+  PEM_write_bio_PUBKEY(bp, evp_dh);
   BIO_free(bp);
 }
 

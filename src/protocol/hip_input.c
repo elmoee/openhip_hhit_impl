@@ -71,6 +71,9 @@
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
 #include <hip/hip_sadb.h>
+#include <stdbool.h>
+#include <openssl/x509.h>
+
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
 #endif /* HIP_VPLS */
@@ -79,23 +82,24 @@
  * Local function declarations
  */
 int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
-                 hip_hit *hitr);
+    hip_hit *hitr);
 int hip_parse_R1(const __u8 *data, hip_assoc *hip_a);
 int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
-                 struct sockaddr *src, struct sockaddr *dst);
+    struct sockaddr *src, struct sockaddr *dst);
 int hip_parse_R2(__u8 *data, hip_assoc *hip_a);
 int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce);
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
-                  __u8 *key, int type);
+     __u8 *key, int type);
 hi_node *check_if_my_hit(hip_hit *hit);
 int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp);
+int handle_hip_cipher(hip_assoc *hip_a, __u16 *transforms, int length);
 int handle_cert(hip_assoc *hip_a, const __u8 *data);
-int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh);
+int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, EVP_PKEY *evp_dh);
 int handle_acks(hip_assoc *hip_a, tlv_ack *ack);
 int handle_esp_info(tlv_esp_info *ei, __u32 spi_out, struct rekey_info *rk);
 int handle_locators(hip_assoc *hip_a, locator **locators,
-                    int num, struct sockaddr *src,
-                    __u32 new_spi);
+       int num, struct sockaddr *src,
+       __u32 new_spi);
 void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src);
 int handle_update_rekey(hip_assoc *hip_a);
 int handle_update_readdress(hip_assoc *hip_a, struct sockaddr **addrcheck);
@@ -116,7 +120,11 @@ int handle_reg_failed(hip_assoc *hip_a, const __u8 *data);
 int add_reg_info(struct reg_entry *regs, __u8 type, int state, __u8 lifetime);
 int delete_reg_info(struct reg_entry *regs, __u8 type);
 int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
-                 __u8* address);
+    __u8* address);
+int handle_dh_groups(__u8 *dh_group_id, int length, bool is_responder);
+
+
+int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length);
 
 /*
  *
@@ -328,7 +336,7 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
           if (validate_hmac(data, len, rvs_hmac, length,
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
-                            hip_a->hip_transform))
+                            hip_a->hit_suite))
             {
               log_(WARN, "Invalid RVS_HMAC.\n");
               if (hip_a->from_via)
@@ -346,6 +354,21 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
               log_(NORM, "RVS_HMAC verified OK.\n");
             }
         }
+        else if (type == PARAM_DH_GROUP_LIST){
+          
+                tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
+          
+                if ((handle_dh_groups(&dhGroupList->group_id, length, true)) < 0)
+                {
+                  hip_send_notify(
+                      hip_a,
+                      NOTIFY_NO_DH_PROPOSAL_CHOSEN,
+                      NULL,
+                      0);
+                  return(-1);
+                }
+          
+              }
       else
         {
           if (check_tlv_unknown_critical(type, length) < 0)
@@ -688,7 +711,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
                    "accepted, removing old state.\n");
               if (hip_a->peer_dh)
                 {
-                  DH_free(hip_a->peer_dh);
+                  EVP_PKEY_free(hip_a->peer_dh);
                   hip_a->peer_dh = NULL;
                 }
               if (hip_a->dh_secret)
@@ -724,54 +747,48 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         }
       else if (type == PARAM_DIFFIE_HELLMAN)
         {
-          if (handle_dh(hip_a, &data[location], &g_id,
-                        NULL) < 0)
-            {
-              hip_send_notify(hip_a,
-                              NOTIFY_NO_DH_PROPOSAL_CHOSEN,
-                              NULL, 0);
-              return(-1);
-            }
+            if (handle_dh(hip_a, &data[location], &g_id,
+                NULL) < 0)
+                {
+                    hip_send_notify(hip_a,
+                                    NOTIFY_NO_DH_PROPOSAL_CHOSEN,
+                                    NULL, 0);
+                    return(-1);
+                }
 
-          /* group ID chosen by responder
-           * get a DH entry from cache or generate a new one */
-          dh_entry = get_dh_entry(g_id, FALSE);
-          dh_entry->ref_count++;
-          hip_a->dh_group_id = g_id;
-          hip_a->dh = dh_entry->dh;
+                /* group ID chosen by responder
+                    * get a DH entry from cache or generate a new one */
+                dh_entry = get_dh_entry(g_id, FALSE);
+                dh_entry->ref_count++;
+                hip_a->dh_group_id = g_id;
+                hip_a->evp_dh = dh_entry->evp_dh;
 
-          /* compute key from our dh and peer's pub_key and
-           * store in dh_secret_key */
-          dh_secret_key = malloc(DH_size(hip_a->dh));
-          if (!dh_secret_key)
-            {
-              log_(WARN, "hip_parse_R1() malloc() error");
-              return(-1);
-            }
-          memset(dh_secret_key, 0, DH_size(hip_a->dh));
-          len = DH_compute_key(dh_secret_key,
-                               hip_a->peer_dh->pub_key,
-                               hip_a->dh);
-          logdh(hip_a->dh);
-          if (len != DH_size(hip_a->dh))
-            {
-              log_(NORM, "Warning: secret key len = %d,",len);
-              log_(NORM, " expected %d\n",DH_size(hip_a->dh));
-            }
-          set_secret_key(dh_secret_key, hip_a);
-          /* Do not free(dh_secret_key), which is now
-           * dh->dh_secret  */
+                /* compute key from our dh and peer's pub_key and
+                    * store in dh_secret_key */
+
+                logdh(hip_a->evp_dh);
+
+
+                EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(hip_a->evp_dh, NULL);
+                EVP_PKEY_derive_init(ctx);
+                EVP_PKEY_derive_set_peer(ctx,hip_a->peer_dh);
+                EVP_PKEY_derive(ctx, NULL, &hip_a->dh_secret_len);
+                dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
+                EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
+                set_secret_key(dh_secret_key, hip_a);
+                /* Do not free(dh_secret_key), which is now
+                    * dh->dh_secret  */
         }
-      else if (type == PARAM_HIP_TRANSFORM)
+        else if (type == PARAM_HIP_CIPHER)
         {
-          p = &((tlv_hip_transform*)tlv)->transform_id;
-          if ((handle_transforms(hip_a, p, length, FALSE)) < 0)
-            {
-              hip_send_notify(hip_a,
-                              NOTIFY_NO_HIP_PROPOSAL_CHOSEN,
-                              NULL, 0);
-              return(-1);
-            }
+          p = &((tlv_hip_cipher*)tlv)->cipher_id;
+          if ((handle_hip_cipher(hip_a, p, length)) < 0)
+          {
+            hip_send_notify(hip_a,
+                            NOTIFY_NO_HIP_PROPOSAL_CHOSEN,
+                            NULL, 0);
+            return(-1);
+          }
         }
       else if (type == PARAM_ESP_TRANSFORM)
         {
@@ -856,12 +873,22 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
                logaddr(SA(&rvs_addr)));
           /* we could check if the VIA RVS address is the same one
            * that we used for the relay */
-        }
-      else if ((type == PARAM_HOST_ID) ||
-               (type == PARAM_HIP_SIGNATURE_2))
-        {
-          /* these parameters already processed */
-        }
+    }
+    else if ((type == PARAM_HOST_ID) ||
+             (type == PARAM_HIP_SIGNATURE_2))
+    {
+      /* these parameters already processed */
+    }
+    else if(type == PARAM_HIT_SUITE_LIST){
+      tlv_hit_suite *hit_suite_list = (tlv_hit_suite*) &data[location];
+
+      if(handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length) < 0){
+        hip_send_notify(hip_a,
+                        NOTIFY_UNSUPPORTED_HIT_SUITE,
+                        NULL, 0);
+        return(-1);
+      }
+    }
       else if (type == PARAM_CERT)
         {
           if (HCNF.peer_certificate_required &&
@@ -878,6 +905,18 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       else if (type == PARAM_LOCATOR)
         {
           ;
+        }
+        else if(type == PARAM_DH_GROUP_LIST){
+          tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
+          if ((handle_dh_groups(&dhGroupList->group_id, length, false)) < 0)
+          {
+            hip_send_notify(
+                hip_a,
+                NOTIFY_NO_DH_PROPOSAL_CHOSEN,
+                NULL,
+                0);
+            return(-1);
+          }
         }
       else
         {
@@ -907,6 +946,16 @@ restore_saved_peer_hi:
       RSA_free(hip_a->peer_hi->rsa);
     }
   memcpy(hip_a->peer_hi, &saved_peer_hi, sizeof(saved_peer_hi));
+  return(-1);
+}
+
+int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length) {
+  for(int i = 0; i < length; i++, id++){
+    if(*id == hip_a->hi->hit_suite_id){
+      hip_a -> hit_suite = *id;
+      return(0);
+    }
+  }
   return(-1);
 }
 
@@ -942,10 +991,10 @@ int hip_handle_R1(__u8 *buff, hip_assoc *hip_a, struct sockaddr *src)
       return(-1);
     }
   /* Set ip, hit, size, hi_t of peer_hi */
-  if (hip_a->dh == NULL)
-    {
-      log_(WARN, "Error: after parsing R1, DH is null.\n");
-    }
+  if (hip_a->evp_dh == NULL)
+  {
+    log_(WARN, "Error: after parsing R1, DH is null.\n");
+  }
   /* Need to send an SPI to peer */
   hip_a->spi_in = get_next_spi();
   /* Fill in the destination address for when an RVS was used, */
@@ -1020,17 +1069,12 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   dh_cache_entry *dh_entry = NULL;
   unsigned char *key, *enc_data = NULL, *unenc_data = NULL;
   AES_KEY aes_key;
-  /* DEPRECATED
-  des_key_schedule ks1, ks2, ks3;
-  BF_KEY bfkey;
-  u_int8_t secret_key1[8], secret_key2[8], secret_key3[8];
-  */
   unsigned char cbc_iv[16];
   int got_dh = 0, comp_keys = 0, status;
   __u8 valid_cert = FALSE;
 
   hip_a_existing = *hip_ar;
-
+  
   /* Find hip header */
   location = 0;
   hiph = (hiphdr*) &data[location];
@@ -1099,42 +1143,42 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
           j = compute_R1_cache_index(&hiph->hit_sndr, FALSE);
           /* locate cookie using current random number */
           if ((validate_solution(
-                 my_host_id->r1_cache[i].current_puzzle,
-                 &cookie,
-                 &hiph->hit_sndr, &hiph->hit_rcvr,
-                 solution) == 0) ||
-              (validate_solution(
-                 my_host_id->r1_cache[i].previous_puzzle,
-                 &cookie,
-                 &hiph->hit_sndr, &hiph->hit_rcvr,
-                 solution) == 0))
-            {
-              dh_entry = my_host_id->r1_cache[i].dh_entry;
-              /* locate cookie using previous random number */
-            }
+            my_host_id->r1_cache[HCNF.dh_group][i].current_puzzle,
+            &cookie,
+            &hiph->hit_sndr, &hiph->hit_rcvr,
+            solution) == 0) ||
+            (validate_solution(
+                my_host_id->r1_cache[HCNF.dh_group][i].previous_puzzle,
+                &cookie,
+                &hiph->hit_sndr, &hiph->hit_rcvr,
+                solution) == 0))
+        {
+          dh_entry = my_host_id->r1_cache[HCNF.dh_group][i].dh_entry;
+          /* locate cookie using previous random number */
+        }
           else if ((validate_solution(
-                      my_host_id->r1_cache[j].
-                      current_puzzle,
-                      &cookie,
-                      &hiph->hit_sndr, &hiph->hit_rcvr,
-                      solution) == 0) ||
-                   (validate_solution(
-                      my_host_id->r1_cache[j].
-                      previous_puzzle,
-                      &cookie,
-                      &hiph->hit_sndr, &hiph->hit_rcvr,
-                      solution) == 0))
-            {
-              dh_entry = my_host_id->r1_cache[j].dh_entry;
-            }
+            my_host_id->r1_cache[HCNF.dh_group][j].
+                current_puzzle,
+            &cookie,
+            &hiph->hit_sndr, &hiph->hit_rcvr,
+            solution) == 0) ||
+                 (validate_solution(
+                     my_host_id->r1_cache[HCNF.dh_group][j].
+                         previous_puzzle,
+                     &cookie,
+                     &hiph->hit_sndr, &hiph->hit_rcvr,
+                     solution) == 0))
+          {
+            dh_entry = my_host_id->r1_cache[HCNF.dh_group][j].dh_entry;
+          }
           else
+          {
+            log_(WARN,"Invalid solution received in I2.\n");
+            if (!OPT.permissive)
             {
-              log_(WARN,"Invalid solution received in I2.\n");
-              if (!OPT.permissive)
-                {
-                  return(-1);
-                }
+              return(-1);
             }
+          }
           /* create HIP association state here */
           hip_a = init_hip_assoc(my_host_id,
                                  (const hip_hit *)&hiph->hit_sndr);
@@ -1146,7 +1190,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
               return(-1);
             }
           hip_a->dh_group_id = dh_entry->group_id;
-          hip_a->dh = dh_entry->dh;
+          hip_a->evp_dh = dh_entry->evp_dh;
           dh_entry->ref_count++;
           dh_entry->is_current = FALSE;               /* mark the entry so it
                                                        *  will not be used again
@@ -1165,119 +1209,112 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
               hip_a->udp = TRUE;
             }
         }
-      else if (type == PARAM_DIFFIE_HELLMAN)
+        else if (type == PARAM_DIFFIE_HELLMAN)
         {
           if (handle_dh(hip_a, &data[location], &g_id,
                         NULL) < 0)
-            {
-              hip_send_notify(hip_a, NOTIFY_INVALID_DH_CHOSEN,
-                              NULL, 0);
-              return(-1);
-            }
+          {
+            hip_send_notify(hip_a, NOTIFY_INVALID_DH_CHOSEN,
+                            NULL, 0);
+            return(-1);
+          }
           /* We chose g_id in R1, so I2 should match */
           if (g_id != hip_a->dh_group_id)
-            {
-              log_(NORM, "Got DH group %d, expected %d.",
-                   g_id, hip_a->dh_group_id);
-              hip_send_notify(hip_a, NOTIFY_INVALID_DH_CHOSEN,
-                              NULL, 0);
-              return(-1);
-            }
+          {
+            log_(NORM, "Got DH group %d, expected %d.",
+                 g_id, hip_a->dh_group_id);
+            hip_send_notify(hip_a, NOTIFY_INVALID_DH_CHOSEN,
+                            NULL, 0);
+            return(-1);
+          }
           /* compute key from our dh and peer's pub_key and
-           * store in dh_secret_key */
-          dh_secret_key = malloc(DH_size(hip_a->dh));
-          if (!dh_secret_key)
-            {
-              log_(WARN, "hip_parse_I2() malloc() error");
-              return(-1);
-            }
-          memset(dh_secret_key, 0, DH_size(hip_a->dh));
-          len = DH_compute_key(dh_secret_key,
-                               hip_a->peer_dh->pub_key,
-                               hip_a->dh);
-          if (len != DH_size(hip_a->dh))
-            {
-              log_(NORM,"Warning: secret key len = %d,", len);
-              log_(NORM,"expected %d\n", DH_size(hip_a->dh));
-            }
+               * store in dh_secret_key */
+          EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(hip_a->evp_dh, NULL);
+          EVP_PKEY_derive_init(ctx);
+          EVP_PKEY_derive_set_peer(ctx,hip_a->peer_dh);
+          EVP_PKEY_derive(ctx, NULL, &hip_a -> dh_secret_len);
+          dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
+          EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
           set_secret_key(dh_secret_key, hip_a);
           got_dh = 1;
           /* Do not free(dh_secret_key), which is now
-           * dh->dh_secret  */
+               * dh->dh_secret  */
         }
-      else if (type == PARAM_HIP_TRANSFORM)
+        else if (type == PARAM_HIP_CIPHER)
         {
-          p = &((tlv_hip_transform*)tlv)->transform_id;
-          if ((handle_transforms(hip_a, p, length, FALSE)) < 0)
-            {
-              hip_send_notify(
+          p = &((tlv_hip_cipher*)tlv)->cipher_id;
+          if ((handle_hip_cipher(hip_a, p, length)) < 0)
+          {
+            hip_send_notify(
                 hip_a,
-                NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN,
+                NOTIFY_INVALID_HIP_CIPHER_CHOSEN,
                 NULL,
                 0);
-              return(-1);
-            }
+            return(-1);
+          }
+          //hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
           /* Must compute keys here so we can use them below. */
           if (got_dh)
+          {
+            hip_a -> hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+            compute_keys(hip_a);
+            if (proposed_keymat_index >
+                hip_a->keymat_index)
             {
-              compute_keys(hip_a);
-              if (proposed_keymat_index >
-                  hip_a->keymat_index)
-                {
-                  hip_a->keymat_index =
-                    proposed_keymat_index;
-                }
-              comp_keys = 1;
+              hip_a->keymat_index =
+                  proposed_keymat_index;
             }
+            comp_keys = 1;
+          }
           else
+          {
+            log_(NORM, "Couldn't do compute_keys() ");
+            log_(NORM, "because DH is not set yet.\n");
+            if (!OPT.permissive)
             {
-              log_(NORM, "Couldn't do compute_keys() ");
-              log_(NORM, "because DH is not set yet.\n");
-              if (!OPT.permissive)
-                {
-                  return(-1);
-                }
+              return(-1);
             }
+          }
         }
-      else if (type == PARAM_ESP_TRANSFORM)
+        else if (type == PARAM_ESP_TRANSFORM)
         {
           /* check E bit */
           if (((tlv_esp_transform*)tlv)->reserved && 0x01)
+          {
+            log_(NORM, "64-bit ESP sequence numbers reque");
+            log_(NORM, "sted but unsupported by kernel!\n");
+            if (OPT.permissive)
             {
-              log_(NORM, "64-bit ESP sequence numbers reque");
-              log_(NORM, "sted but unsupported by kernel!\n");
-              if (OPT.permissive)
-                {
-                  return(-1);
-                }
+              return(-1);
             }
+          }
           p = &((tlv_esp_transform*)tlv)->suite_id;
           if ((handle_transforms(hip_a, p, length - 2,
                                  TRUE)) < 0)
-            {
-              hip_send_notify(
+          {
+            hip_send_notify(
                 hip_a,
                 NOTIFY_INVALID_ESP_TRANSFORM_CHOSEN,
                 NULL,
                 0);
-              return(-1);
-            }
+            return(-1);
+          }
         }
-      else if (type == PARAM_ENCRYPTED)
+        else if (type == PARAM_ENCRYPTED)
         {
           err = 0;
           /* NULL encryption */
-          if (ENCR_NULL(hip_a->hip_transform))
-            {
-              len = length - 8;                   /* tlv - type,length,reserv */
-              len = eight_byte_align(len);
-              enc_data = NULL;
-              unenc_data = malloc(len);
-              memset(unenc_data, 0, len);
-              memcpy(unenc_data, ((tlv_encrypted*)tlv)->iv,
-                     len);
-              /* Cipher decryption */
-            }
+          if (ENCR_NULL(hip_a->hip_cipher))
+          {
+            len = length - 8;                   /* tlv - type,length,reserv */
+            len = eight_byte_align(len);
+            enc_data = NULL;
+            unenc_data = malloc(len);
+            memset(unenc_data, 0, len);
+            memcpy(unenc_data, ((tlv_encrypted*)tlv)->iv,
+                   len);
+            /* Cipher decryption */
+          }
           else
             {
               if (!comp_keys)
@@ -1289,7 +1326,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                 }
               /* prepare the data */
               /* tlv length - reserved,iv */
-              iv_len = enc_iv_len(hip_a->hip_transform);
+              iv_len = enc_iv_len(hip_a->hip_cipher);
               len = length - (4 + iv_len);
               len = eight_byte_align(len);
               enc_data = malloc(len);
@@ -1303,33 +1340,26 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
               memcpy(cbc_iv, ((tlv_encrypted*)tlv)->iv,
                      iv_len);
               key = get_key(hip_a, HIP_ENCRYPTION, TRUE);
-              key_len = enc_key_len(hip_a->hip_transform);
+              key_len = enc_key_len_hip_cipher(hip_a->hip_cipher);
 
               /* prepare keys and decrypt based on cipher */
-              switch (hip_a->hip_transform)
-                {
-                case ESP_AES128_CBC_HMAC_SHA1:
-                case ESP_AES128_CBC_HMAC_SHA256:
-                case ESP_AES256_CBC_HMAC_SHA256:
-                case ESP_AES_CCM_8:
-                case ESP_AES_CCM_16:
-                case ESP_AES_GCM_ICV_8:
-                case ESP_AES_GCM_ICV_16:
-                case ESP_AES_CMAC_96:
-                case ESP_AES_GMAC:
+              switch (hip_a->hip_cipher)
+              {
+                case HIP_CIPHER_AES128_CBC:
+                case HIP_CIPHER_AES256_CBC:
                   log_(NORM, "AES decryption key: 0x");
                   print_hex(key, key_len);
                   log_(NORM, "\n");
                   if (AES_set_decrypt_key(key, 8 *
-                                          key_len,
+                                               key_len,
                                           &aes_key))
-                    {
-                      log_(WARN, "Unable to use cal");
-                      log_(NORM, "ulated DH secret ");
-                      log_(NORM, "for AES key.\n");
-                      err = NOTIFY_ENCRYPTION_FAILED;
-                      goto I2_ERROR;
-                    }
+                  {
+                    log_(WARN, "Unable to use cal");
+                    log_(NORM, "ulated DH secret ");
+                    log_(NORM, "for AES key.\n");
+                    err = NOTIFY_ENCRYPTION_FAILED;
+                    goto I2_ERROR;
+                  }
                   log_(NORM, "Decrypting %d bytes ", len);
                   log_(NORM, "using AES.\n");
                   AES_cbc_encrypt(enc_data,
@@ -1339,86 +1369,15 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                                   cbc_iv,
                                   AES_DECRYPT);
                   break;
-                /* DEPRECATED 
-                case ESP_3DES_CBC_HMAC_SHA1:
-                case ESP_3DES_CBC_HMAC_MD5:
-                  memcpy(&secret_key1, key, key_len / 3);
-                  memcpy(&secret_key2,
-                         key + 8,
-                         key_len / 3);
-                  memcpy(&secret_key3,
-                         key + 16,
-                         key_len / 3);
-                  des_set_odd_parity((des_cblock*)
-                                     (&secret_key1));
-                  des_set_odd_parity((des_cblock*)
-                                     (&secret_key2));
-                  des_set_odd_parity((des_cblock*)
-                                     (&secret_key3));
-                  log_(NORM, "decryption key: 0x");
-                  print_hex(secret_key1, key_len);
-                  log_(NORM, "-");
-                  print_hex(secret_key2, key_len);
-                  log_(NORM, "-");
-                  print_hex(secret_key3, key_len);
-                  log_(NORM, "\n");
-
-                  if (des_set_key_checked((des_cblock*)
-                                          &secret_key1,
-                                          ks1) ||
-                      des_set_key_checked((des_cblock*)
-                                          &secret_key2,
-                                          ks2) ||
-                      des_set_key_checked((des_cblock*)
-                                          &secret_key3,
-                                          ks3))
-                    {
-                      log_(NORM, "Unable to use cal");
-                      log_(NORM, "culated DH secret");
-                      log_(NORM, " for 3DES key.\n");
-                      err = NOTIFY_ENCRYPTION_FAILED;
-                      goto I2_ERROR;
-                    }
-                  log_(NORM, "Decrypting %d bytes ", len);
-                  log_(NORM, "using 3-DES.\n");
-                  des_ede3_cbc_encrypt(
-                    enc_data,
-                    unenc_data,
-                    len,
-                    ks1,
-                    ks2,
-                    ks3,
-                    (des_cblock*)
-                    cbc_iv,
-                    DES_DECRYPT);
-                  break;
-                */ 
-                /* DEPRECATED 
-                case ESP_BLOWFISH_CBC_HMAC_SHA1:
-                  log_(NORM, "BLOWFISH decryption key: ");
-                  log_(NORM, "0x");
-                  print_hex(key, key_len);
-                  log_(NORM, "\n");
-                  BF_set_key(&bfkey, key_len, key);
-                  log_(NORM, "Decrypting %d bytes ", len);
-                  log_(NORM, "using BLOWFISH.\n");
-                  BF_cbc_encrypt(enc_data,
-                                 unenc_data,
-                                 len,
-                                 &bfkey,
-                                 cbc_iv,
-                                 BF_DECRYPT);
-                  break;
-                */
                 default:
                   log_(WARN, "Unsupported transform ");
                   log_(NORM, "for decryption\n");
                   err = NOTIFY_ENCRYPTION_FAILED;
                   goto I2_ERROR;
                   break;
-                }                 /* end switch(hip_a->hip_transform) */
+              }                 /* end switch(hip_a->hip_transform) */
             }             /* end if */
-                          /* parse HIi */
+            /* parse HIi */
           tlv = (tlv_head*) unenc_data;
           if (ntohs(tlv->type) == PARAM_HOST_ID)
             {
@@ -1513,10 +1472,11 @@ I2_ERROR:
           hiph->hdr_len = (len / 8) - 1;
           log_(NORM, "HMAC verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
+          hip_a->hit_suite = hip_a->hi->hit_suite_id;
           if (validate_hmac(data, len,
                             hmac, length,
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
-                            hip_a->hip_transform))
+                            hip_a->hit_suite))
             {
               log_(WARN, "Invalid HMAC.\n");
               hip_send_notify(hip_a,
@@ -1906,9 +1866,9 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
           log_(NORM, "HMAC_2 verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
           if (validate_hmac(data, len,
-                            hmac, 20,
+                            hmac, htons(hmac_tlv_tmp.length),
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
-                            hip_a->hip_transform))
+                            hip_a->hit_suite))
             {
               log_(WARN, "Invalid HMAC_2.\n");
               hip_send_notify(hip_a,
@@ -2147,7 +2107,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
           if (validate_hmac(data, len,
                             hmac, length,
                             key,
-                            hip_a->hip_transform))
+                            hip_a->hit_suite))
             {
               log_(WARN, "Invalid HMAC.\n");
               hip_send_notify(hip_a,
@@ -2227,7 +2187,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
                 len,
                 auth_ticket->hmac, sizeof(auth_ticket->hmac),
                 get_key(hip_a, HIP_INTEGRITY, TRUE),
-                hip_a->hip_transform))
+                hip_a->hit_suite))
             {
               log_(WARN, "Invalid HMAC over ticket.\n");
             }
@@ -2327,28 +2287,28 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
             }
         }
       else if (type == PARAM_DIFFIE_HELLMAN)
+      {
+        if (rk->keymat_index != 0)
         {
-          if (rk->keymat_index != 0)
-            {
-              log_(WARN, "Diffie-Hellman found in UPDATE, ");
-              log_(NORM, "but keymat_index=%d.\n",
-                   rk->keymat_index);
-              if (!OPT.permissive)
-                {
-                  return(-1);
-                }
-            }
-          /* Save the DH context in rk->dh for later use */
-          rk->dh = DH_new();
-          if (handle_dh(NULL, &data[location], &g_id,
-                        rk->dh) < 0)
-            {
-              return(-1);
-            }
+          log_(WARN, "Diffie-Hellman found in UPDATE, ");
+          log_(NORM, "but keymat_index=%d.\n",
+               rk->keymat_index);
+          if (!OPT.permissive)
+          {
+            return(-1);
+          }
         }
+        /* Save the DH context in rk->dh for later use */
+        rk->dh = EVP_PKEY_new();
+        if (handle_dh(NULL, &data[location], &g_id,
+                      rk->dh) < 0)
+        {
+          return(-1);
+        }
+      }
       else if ((type == PARAM_ECHO_RESPONSE) ||
                (type == PARAM_ECHO_RESPONSE_NOSIG))
-        {
+      {
           if (length != sizeof(__u32))
             {
               log_(WARN, "ECHO_RESPONSE has wrong length.\n");
@@ -2503,7 +2463,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
               if (validate_hmac(data, len, rvs_hmac, length,
                                 get_key(hip_a_rvs,
                                         HIP_INTEGRITY, TRUE),
-                                hip_a_rvs->hip_transform))
+                                hip_a_rvs->hit_suite))
                 {
                   log_(WARN, "Invalid RVS_HMAC.\n");
                   if (hip_a->from_via)
@@ -2521,13 +2481,13 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
                   log_(NORM, "RVS_HMAC verified OK.\n");
                 }
             }
-        }
-      else if ((type == PARAM_HMAC) ||
-               (type == PARAM_HIP_SIGNATURE) ||
-               (type == PARAM_AUTH_TICKET))
-        {
-          /* these parameters already processed */
-        }
+      }
+        else if ((type == PARAM_HMAC) ||
+        (type == PARAM_HIP_SIGNATURE) ||
+        (type == PARAM_AUTH_TICKET))
+      {
+        /* these parameters already processed */
+      }
       else
         {
           if (check_tlv_unknown_critical(type, length) < 0)
@@ -2651,7 +2611,7 @@ int hip_handle_update(__u8 *data, hip_assoc *hip_a, struct sockaddr *src,
        */
       if (hip_a->peer_rekey->dh)
         {
-          DH_free(hip_a->peer_rekey->dh);
+            EVP_PKEY_free(hip_a->peer_rekey->dh);
         }
       memcpy(hip_a->peer_rekey, &rk, sizeof(struct rekey_info));
     }
@@ -3093,8 +3053,8 @@ void finish_address_check(hip_assoc *hip_a, __u32 nonce, struct sockaddr *src)
  */
 int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 {
-  int len, keymat_index, err;
-  unsigned char *dh_secret_key;
+  int keymat_index, err;
+  unsigned char *dh_secret_key = NULL;
 
   /*
    * Rekey from section 8.11.3
@@ -3117,9 +3077,9 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
 
       if (hip_a->rekey->dh)
         {
-          unuse_dh_entry(hip_a->dh);
+          unuse_dh_entry(hip_a->evp_dh);
           hip_a->dh_group_id = hip_a->rekey->dh_group_id;
-          hip_a->dh  = hip_a->rekey->dh;
+          hip_a->evp_dh  = hip_a->rekey->dh;
           hip_a->rekey->dh = NULL;               /* moved to hip_a->dh */
         }
       if (hip_a->peer_rekey->dh)
@@ -3132,26 +3092,24 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
        * compute a new secret key from our dh and peer's pub_key
        * and recompute the keymat
        */
-      dh_secret_key = malloc(DH_size(hip_a->dh));
       if (!dh_secret_key)
         {
           log_(WARN, "hip_finish_rekey() malloc() error");
           return(-1);
         }
-      memset(dh_secret_key, 0, DH_size(hip_a->dh));
-      len = DH_compute_key(dh_secret_key,
-                           hip_a->peer_dh->pub_key,
-                           hip_a->dh);
-      if (len != DH_size(hip_a->dh))
-        {
-          log_(WARN, "Warning: secret key len = %d, ", len);
-          log_(NORM, "expected %d\n", DH_size(hip_a->dh));
-        }
-      set_secret_key(dh_secret_key, hip_a);
-      keymat_index = 0;
-      compute_keymat(hip_a);
-      /* 2. set new keymat_index to 0, or choose lowest keymat index
-       */
+
+        EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(hip_a->evp_dh, NULL);
+        EVP_PKEY_derive_init(ctx);
+        EVP_PKEY_derive_set_peer(ctx,hip_a->peer_dh);
+        EVP_PKEY_derive(ctx, NULL, &hip_a -> dh_secret_len);
+        dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
+        EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
+    
+        set_secret_key(dh_secret_key, hip_a);
+        keymat_index = 0;
+        compute_keymat(hip_a);
+        /* 2. set new keymat_index to 0, or choose lowest keymat index
+           */
     }
   else
     {
@@ -3352,7 +3310,7 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
           if (validate_hmac(data, len,
                             hmac, length,
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
-                            hip_a->hip_transform))
+                            hip_a->hit_suite))
             {
               log_(WARN, "Invalid HMAC.\n");
               hip_send_notify(hip_a,
@@ -3592,7 +3550,7 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
   log_(WARN, "Received NOTIFY from %s: ", logaddr(HIPA_SRC(hip_a)));
 
   switch (code)
-    {
+  {
     case NOTIFY_UNSUPPORTED_CRITICAL_PARAMETER_TYPE:
       log_(NORM, "Unsupported critical parameter type.\n");
       break;
@@ -3608,7 +3566,7 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
     case NOTIFY_NO_HIP_PROPOSAL_CHOSEN:
       log_(NORM, "No acceptable HIP Transform was proposed.\n");
       break;
-    case NOTIFY_INVALID_HIP_TRANSFORM_CHOSEN:
+    case NOTIFY_INVALID_HIP_CIPHER_CHOSEN:
       log_(NORM, "Invalid HIP Transform chosen.\n");
       break;
     case NOTIFY_NO_ESP_PROPOSAL_CHOSEN:
@@ -3651,7 +3609,7 @@ int hip_handle_notify(__u8 *buff, hip_assoc *hip_a)
     default:
       log_(NORM, "Unknown notify code: %d\n", code);
       break;
-    }
+  }
 
   if (data_len > 0)
     {
@@ -3782,8 +3740,8 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
                        DSA *dsa, RSA *rsa)
 {
   int err;
-  SHA_CTX c;
-  unsigned char md[SHA_DIGEST_LENGTH];
+  SHA256_CTX c;
+  unsigned char md[SHA256_DIGEST_LENGTH];
   DSA_SIG dsa_sig;
   int length, sig_len;
   tlv_hip_sig *sig = (tlv_hip_sig*)tlv;
@@ -3839,13 +3797,13 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
   sig_len = length - 1;
 
   /* calculate SHA1 hash of the HIP message */
-  SHA1_Init(&c);
-  SHA1_Update(&c, data, data_len);
-  SHA1_Final(md, &c);
+  SHA256_Init(&c);
+  SHA256_Update(&c, data, data_len);
+  SHA256_Final(md, &c);
 
   /* for debugging, print out md or signature */
   log_(NORM, "SHA1: ");
-  print_hex(md, SHA_DIGEST_LENGTH);
+  print_hex(md, SHA256_DIGEST_LENGTH);
   log_(NORM, "\n");
 
   switch (alg)
@@ -3855,13 +3813,13 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
       dsa_sig.r = BN_bin2bn(&sig->signature[1], 20, NULL);
       dsa_sig.s = BN_bin2bn(&sig->signature[21], 20, NULL);
       /* verify the DSA signature */
-      err = DSA_do_verify(md, SHA_DIGEST_LENGTH, &dsa_sig, dsa);
+      err = DSA_do_verify(md, SHA256_DIGEST_LENGTH, &dsa_sig, dsa);
       BN_free(dsa_sig.r);
       BN_free(dsa_sig.s);
       break;
     case HI_ALG_RSA:
       /* verify the RSA signature */
-      err = RSA_verify(NID_sha1, md, SHA_DIGEST_LENGTH,
+      err = RSA_verify(NID_sha1, md, SHA256_DIGEST_LENGTH,
                        sig->signature, sig_len, rsa);
       break;
     default:
@@ -3905,35 +3863,30 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
                   __u8 *key, int type)
 {
+  log_(WARN, "validate hmac: %d \n", type);
   unsigned char hmac_md[EVP_MAX_MD_SIZE] = {0};
   unsigned int hmac_md_len = EVP_MAX_MD_SIZE;
-  int key_len = auth_key_len(type);
+  int key_len = auth_key_len_hit_suite(type);
 
   switch (type)
-    {
-    case ESP_AES128_CBC_HMAC_SHA1:
+  {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      HMAC(   EVP_sha256(),
+              key, key_len,
+              data, data_len,
+              hmac_md, &hmac_md_len  );
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      HMAC(   EVP_sha384(),
+              key, key_len,
+              data, data_len,
+              hmac_md, &hmac_md_len  );
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       HMAC(   EVP_sha1(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
       break;
-    case ESP_NULL_HMAC_SHA256:
-    case ESP_AES128_CBC_HMAC_SHA256:
-    case ESP_AES256_CBC_HMAC_SHA256:
-      HMAC(   EVP_sha256(),
-              key, key_len,
-              data, data_len,
-              hmac_md, &hmac_md_len);
-      break;
-    /* DEPRECATED 
-    case ESP_3DES_CBC_HMAC_MD5:
-    case ESP_NULL_HMAC_MD5:
-      HMAC(   EVP_md5(),
-              key, key_len,
-              data, data_len,
-              hmac_md, &hmac_md_len  );
-      break;
-      */
       /* in case someone tries to use unsupported mac/signature algorithm */
     default:
       return(-1);
@@ -3944,12 +3897,12 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
    */
   /* compare lower bits of received HMAC versus calculated HMAC
    * for MD5, this is the lower 128 bits; for SHA-1 it's 160-bits */
+  log_(WARN, "computed hmac: (%d) ", hmac_len);
   if ((memcmp(&hmac[hmac_len - hmac_md_len], hmac_md,
               hmac_md_len) == 0))
-    {
-      return(0);
-    }
-  log_(WARN, "computed hmac: (%d) ", hmac_md_len);
+  {
+    return(0);
+  }
   print_hex(hmac_md, hmac_md_len);
   log_(NORM, "\n    received hmac: (%d) ", hmac_len);
   print_hex(hmac, hmac_len);
@@ -3987,6 +3940,60 @@ hi_node *check_if_my_hit(hip_hit *hit)
   return(my_host_id);
 }
 
+int handle_hip_cipher(hip_assoc *hip_a, __u16 *transforms, int length)
+{
+  __u16 *transform_id_packet;
+  int transforms_left;
+  __u16 transform_id;
+  __u16 *chosen = &hip_a->hip_cipher;
+  transforms_left = length / sizeof(__u16);
+  transform_id_packet = transforms;
+  *chosen = 0;
+  if (transforms_left >= HIP_CIPHER_MAX)
+  {
+    log_(WARN, "Warning: There are %d transforms present but the "
+           "maximum number is %d.\n",
+         transforms_left, HIP_CIPHER_MAX - 1);
+    /* continue to read the transforms... */
+  }
+
+  for (; (transforms_left > 0); transform_id_packet++,
+    transforms_left--)
+  {
+    transform_id = ntohs(*transform_id_packet);
+
+    if ((transform_id <= HIP_CIPHER_RESERVED) ||
+        (transform_id >= HIP_CIPHER_MAX))
+    {
+      log_(WARN, "Ignoring invalid transform (%d).\n",
+           transform_id);
+      continue;
+    }
+    if ((hip_a->available_transforms >> transform_id) & 0x1)
+    {
+      *chosen = transform_id;
+      break;
+    }
+  }
+  if (*chosen == 0)
+  {
+    log_(
+      WARN,
+      "Couldn't find a suitable HIP transform.  This error could indicate that hip.conf was not successfully loaded.\n");
+    if (OPT.permissive)             /* AES is mandatory */
+    {
+      log_(WARN, "Continuing using AES.\n");
+      *chosen = HIP_CIPHER_AES128_CBC;
+    }
+    else
+    {
+      return(-1);
+    }
+  }
+  return(0);
+}
+
+
 /*
  * handle_transforms()
  *
@@ -4011,48 +4018,48 @@ int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
   transforms_left = length / sizeof(__u16);
   transform_id_packet = transforms;
   *chosen = 0;
-  if (transforms_left >= SUITE_ID_MAX)
-    {
-      log_(WARN, "Warning: There are %d transforms present but the "
-           "maximum number is %d.\n",
-           transforms_left, SUITE_ID_MAX - 1);
-      /* continue to read the transforms... */
-    }
+  if (transforms_left >= ESP_MAX)
+  {
+    log_(WARN, "Warning: There are %d transforms present but the "
+             "maximum number is %d.\n",
+         transforms_left, ESP_MAX - 1);
+    /* continue to read the transforms... */
+  }
 
   for (; (transforms_left > 0); transform_id_packet++,
-       transforms_left--)
-    {
-      transform_id = ntohs(*transform_id_packet);
+      transforms_left--)
+  {
+    transform_id = ntohs(*transform_id_packet);
 
-      if ((transform_id <= RESERVED) ||
-          (transform_id >= SUITE_ID_MAX))
-        {
-          log_(WARN, "Ignoring invalid transform (%d).\n",
-               transform_id);
-          continue;
-        }
-      if ((hip_a->available_transforms >>
-           (transform_id + offset)) & 0x1)
-        {
-          *chosen = transform_id;
-          break;
-        }
-    }
-  if (*chosen == 0)
+    if ((transform_id <= RESERVED) ||
+        (transform_id >= ESP_MAX))
     {
-      log_(
+      log_(WARN, "Ignoring invalid transform (%d).\n",
+           transform_id);
+      continue;
+    }
+    if ((hip_a->available_transforms >>
+                                     (transform_id + offset)) & 0x1)
+    {
+      *chosen = transform_id;
+      break;
+    }
+  }
+  if (*chosen == 0)
+  {
+    log_(
         WARN,
         "Couldn't find a suitable HIP transform.  This error could indicate that hip.conf was not successfully loaded.\n");
-      if (OPT.permissive)             /* AES is mandatory */
-        {
-          log_(WARN, "Continuing using AES.\n");
-          *chosen = ESP_AES128_CBC_HMAC_SHA1;
-        }
-      else
-        {
-          return(-1);
-        }
+    if (OPT.permissive)             /* AES is mandatory */
+    {
+      log_(WARN, "Continuing using AES.\n");
+      *chosen = ESP_AES128_CBC_HMAC_SHA1;
     }
+    else
+    {
+      return(-1);
+    }
+  }
   return(0);
 }
 
@@ -4063,13 +4070,12 @@ int handle_transforms(hip_assoc *hip_a, __u16 *transforms, int length, int esp)
  * Parse a Diffie-Hellman parameter, storing its group ID into g and
  * the public key into hip_a->peer_dh or dh
  */
-int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
+int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, EVP_PKEY *evp_dh)
 {
-  __u8 g_id, g_id2;
-  int len, len2;
+  __u8 g_id;
+  int len;
   unsigned char *pub_key, *pub;
   tlv_diffie_hellman *tlv_dh;
-  tlv_diffie_hellman_pub_value *pub_val2;
 
   tlv_dh = (tlv_diffie_hellman*) data;
 
@@ -4077,56 +4083,27 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, DH *dh)
   *g = g_id;
   if ((g_id <= DH_RESERVED) ||
       (g_id >= DH_MAX))
-    {
-      log_(WARN, "DH group unsupported %d\n", g_id);
-      return(-1);
-    }
+  {
+    log_(WARN, "DH group unsupported %d\n", g_id);
+    return(-1);
+  }
 
   len = ntohs(tlv_dh->pub_len);
   if (len > (ntohs(tlv_dh->length) - 3))
-    {
-      log_(WARN, "Error: public key length specified (%d) was longer"
-           " than TLV length!\n", len);
-      return(-1);
-    }
+  {
+    log_(WARN, "Error: public key length specified (%d) was longer"
+        " than TLV length!\n", len);
+    return(-1);
+  }
   /* DH_size = BN_num_bytes(dh->p) */
   if (len != dhprime_len[g_id])
-    {
-      log_(WARN, "Warning: public key len = %d, ", len);
-      log_(NORM, "expected %d for this group id (%d)\n",
-           dhprime_len[g_id], g_id);
-    }
+  {
+    log_(WARN, "Warning: public key len = %d, ", len);
+    log_(NORM, "expected %d for this group id (%d)\n",
+         dhprime_len[g_id], g_id);
+  }
   pub = tlv_dh->pub;
 
-  /* are there two DH values? */
-  if ((ntohs(tlv_dh->length) - 3) > len)
-    {
-      pub_val2 = (tlv_diffie_hellman_pub_value*)&tlv_dh->pub[len];
-      g_id2 = pub_val2->group_id;
-      if ((g_id2 <= DH_RESERVED) ||
-          (g_id2 >= DH_MAX))
-        {
-          log_(WARN, "Warning: DH group of second DH value is "
-               "unsupported %d\n", g_id2);
-          goto decode_dh;               /* use first DH value */
-        }
-      if (g_id >= g_id2)
-        {
-          goto decode_dh;               /* use first DH value */
-        }
-      /* use second DH value, it is stronger than the first */
-      len2 = ntohs(pub_val2->pub_len);
-      if ((6 + len + len2) > ntohs(tlv_dh->length))
-        {
-          log_(WARN, "Error: second public key length specified "
-               "(%d) was longer than TLV length!\n", len);
-          return(-1);
-        }
-      g_id = g_id2;
-      len = len2;
-      pub = pub_val2->pub;
-    }
-decode_dh:
   /* g_id, len, pub are set before this */
   pub_key = malloc(len);
   memcpy(pub_key, pub, len);
@@ -4138,29 +4115,22 @@ decode_dh:
 #endif
 
   /* store the public key in hip_a->peer_dh */
-  if (dh == NULL)
+  if (evp_dh == NULL)
+  {
+    if (hip_a->peer_dh)
     {
-      if (hip_a->peer_dh)
-        {
-          DH_free(hip_a->peer_dh);
-        }
-      hip_a->peer_dh = DH_new();
-      hip_a->peer_dh->g = BN_new();
-      BN_set_word(hip_a->peer_dh->g, dhgen[g_id]);
-      hip_a->peer_dh->p = BN_bin2bn(dhprime[g_id],
-                                    dhprime_len[g_id], NULL);
-      hip_a->peer_dh->pub_key = BN_bin2bn(pub_key, len, NULL);
-      /* or return the public key */
-    }
-  else
-    {
-      dh->g = BN_new();
-      BN_set_word(dh->g, dhgen[g_id]);
-      dh->p = BN_bin2bn(dhprime[g_id], dhprime_len[g_id], NULL);
-      dh->pub_key = BN_bin2bn(pub_key, len, NULL);
+      EVP_PKEY_free(hip_a->peer_dh);
     }
 
-  free(pub_key);
+    hip_a->peer_dh = d2i_PUBKEY(NULL, (const unsigned char**)&pub_key, len);
+    log_(NORM, "EVP_PKEY type: %d", hip_a->peer_dh->type);
+  }
+  else
+  {
+    evp_dh = d2i_PUBKEY(NULL, (const unsigned char**)&pub_key, len);
+  }
+  //TODO: fix free problem
+  //free(pub_key);
   return(0);
 }
 
@@ -4873,9 +4843,10 @@ int check_tlv_length(int type, int length)
     case PARAM_PUZZLE:
       return(length == 12);
     case PARAM_SOLUTION:
+      return(length == 20);
     case PARAM_HMAC:
     case PARAM_HMAC_2:
-      return(length == 20);
+      return(length == 64);
     case PARAM_SEQ:
       return(length == 4);
     /* not checking variable length */
@@ -5279,3 +5250,54 @@ int add_from_via(hip_assoc *hip_a, __u16 type, struct sockaddr *addr,
   return(0);
 }
 
+int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
+    __u8 *dh_group_list;
+    __u8 dh_group_id;
+    __u16 available_group_id;
+  
+  
+    if(is_responder){
+      dh_group_list = HCNF.dh_group_list;
+      available_group_id = conf_dh_group_ids_to_mask(dh_group_ids,length);
+      length = DH_MAX-1;
+    } else{
+  
+      dh_group_list =  dh_group_ids;
+      available_group_id = conf_dh_group_ids_to_mask(HCNF.dh_group_list, DH_MAX-1);
+    }
+  
+    HCNF.dh_group = 0;
+    if (length >= DH_MAX)
+    {
+      log_(WARN, "Warning: There are %d dh group ids present but the "
+               "maximum number is %d.\n",
+           length, DH_MAX - 1);
+      /* continue to read the group ids... */
+    }
+  
+    for (int i = 0; (i < length); dh_group_list++,
+        i++)
+    {
+      dh_group_id = *dh_group_list;
+      if ((dh_group_id <= DH_RESERVED) ||
+          (dh_group_id >= DH_MAX))
+      {
+        log_(WARN, "Ignoring invalid DH groups (%d).\n",
+             dh_group_id);
+        continue;
+      }
+      if ((available_group_id >> dh_group_id) & 0x1)
+      {
+        HCNF.dh_group = dh_group_id;
+        break;
+      }
+    }
+    if (HCNF.dh_group == 0)
+    {
+      log_(
+          WARN,
+          "Couldn't find a suitable DH group.  This error could indicate that hip.conf was not successfully loaded.\n");
+      return(-1);
+    }
+    return(0);
+  }

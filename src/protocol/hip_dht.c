@@ -121,7 +121,7 @@ struct dht_val {
   char app[255];
   __u8 key[DHT_KEY_SIZE];       /* DHT key */
   int value_hash_len;
-  __u8 value_hash[SHA_DIGEST_LENGTH];       /* 20 bytes required for remove */
+  __u8 value_hash[SHA256_DIGEST_LENGTH];       /* 20 bytes required for remove */
   int secret_len;
   __u8 secret[40];              /* secret value for remove, max 40 bytes */
   struct timeval expire_time;       /* now + ttl_sec */
@@ -387,8 +387,8 @@ int hip_dht_lookup_hit_by_name(char *name, hip_hit *hit, int retry)
   int mode, value_len, err;
   struct sockaddr_storage ss_server;
   struct sockaddr *server = (struct sockaddr*)&ss_server;
-  SHA_CTX c;
-  char name_hash[SHA_DIGEST_LENGTH];
+  SHA256_CTX c;
+  char name_hash[SHA256_DIGEST_LENGTH];
   __u8 value[DHT_VAL_SIZE];
   hiphdr *hiph;
 
@@ -404,10 +404,10 @@ int hip_dht_lookup_hit_by_name(char *name, hip_hit *hit, int retry)
   /*
    * Prepare DHT key: SHA-1(name)
    */
-  memset(name_hash, 0, SHA_DIGEST_LENGTH);
-  SHA1_Init(&c);
-  SHA1_Update(&c, name, strlen(name));
-  SHA1_Final((__u8 *)name_hash, &c);
+  memset(name_hash, 0, SHA256_DIGEST_LENGTH);
+  SHA256_Init(&c);
+  SHA256_Update(&c, name, strlen(name));
+  SHA256_Final((__u8 *)name_hash, &c);
 
   memset(value, 0, DHT_VAL_SIZE);
 
@@ -419,7 +419,7 @@ int hip_dht_lookup_hit_by_name(char *name, hip_hit *hit, int retry)
   mode = XMLRPC_MODE_GET;
   mode |= (retry) ? XMLRPC_MODE_RETRY_ON : XMLRPC_MODE_RETRY_OFF;
   err = hip_xmlrpc_getput(mode, XMLRPC_APP_HIT, server,
-                          name_hash, SHA_DIGEST_LENGTH,
+                          name_hash, SHA256_DIGEST_LENGTH,
                           (char *)value, &value_len,
                           NULL, 0, 0);
   if (err < 0)
@@ -635,9 +635,9 @@ int hip_dht_publish_hit(hi_node *hi, char *name, int retry)
   int mode, len;
   struct sockaddr_storage ss_server;
   struct sockaddr *server = (struct sockaddr*)&ss_server;
-  __u8 name_hash[SHA_DIGEST_LENGTH], secret[2 * SHA_DIGEST_LENGTH];
+  __u8 name_hash[SHA256_DIGEST_LENGTH], secret[2 * SHA256_DIGEST_LENGTH];
   hiphdr hdrr;
-  SHA_CTX c;
+  SHA256_CTX c;
 
   if (hip_dht_select_server(server) < 0)
     {
@@ -647,10 +647,10 @@ int hip_dht_publish_hit(hi_node *hi, char *name, int retry)
   /*
    * Prepare the DHT key: SHA-1(name)
    */
-  memset(name_hash, 0, SHA_DIGEST_LENGTH);
-  SHA1_Init(&c);
-  SHA1_Update(&c, name, strlen(name));
-  SHA1_Final(name_hash, &c);
+  memset(name_hash, 0, SHA256_DIGEST_LENGTH);
+  SHA256_Init(&c);
+  SHA256_Update(&c, name, strlen(name));
+  SHA256_Final(name_hash, &c);
 
   /*
    * Prepare the DHT value: HDRR([CERT])
@@ -674,13 +674,13 @@ int hip_dht_publish_hit(hi_node *hi, char *name, int retry)
    * For the Bamboo DHT (OpenDHT), this is tied
    * to an XML RPC "PUT" call
    */
-  RAND_bytes(secret, 2 * SHA_DIGEST_LENGTH);
+  RAND_bytes(secret, 2 * SHA256_DIGEST_LENGTH);
   mode = XMLRPC_MODE_PUT;
   mode |= (retry) ? XMLRPC_MODE_RETRY_ON : XMLRPC_MODE_RETRY_OFF;
   return(hip_xmlrpc_getput(mode, XMLRPC_APP_HIT, server,
-                           (char *)name_hash, SHA_DIGEST_LENGTH,       /* key */
+                           (char *)name_hash, SHA256_DIGEST_LENGTH,       /* key */
                            (char *)&hdrr, &len,                 /* value */
-                           (char *)secret, 2 * SHA_DIGEST_LENGTH,
+                           (char *)secret, 2 * SHA256_DIGEST_LENGTH,
                            DHT_DEF_TTL));
 }
 
@@ -701,7 +701,7 @@ int hip_dht_publish_addr(hi_node *hi, struct sockaddr *addr, int retry)
   struct sockaddr_storage ss_server;
   struct sockaddr *server = (struct sockaddr*)&ss_server;
   __u8 dht_key[DHT_KEY_SIZE], hdrr[DHT_VAL_SIZE];
-  __u8 secret[2 * SHA_DIGEST_LENGTH];
+  __u8 secret[2 * SHA256_DIGEST_LENGTH];
   int hdrr_len, secret_len;
 
   if (hip_dht_select_server(server) < 0)
@@ -730,7 +730,7 @@ int hip_dht_publish_addr(hi_node *hi, struct sockaddr *addr, int retry)
    * For the Bamboo DHT (OpenDHT), this is tied
    * to an XML RPC "PUT" call
    */
-  secret_len = 2 * SHA_DIGEST_LENGTH;
+  secret_len = 2 * SHA256_DIGEST_LENGTH;
   RAND_bytes(secret, secret_len);
   mode = XMLRPC_MODE_PUT;
   mode |= (retry) ? XMLRPC_MODE_RETRY_ON : XMLRPC_MODE_RETRY_OFF;
@@ -952,8 +952,8 @@ int hip_xmlrpc_getput(int mode, char *app, struct sockaddr *server,
   unsigned int retry_attempts = 0;
   struct sockaddr_in src_addr;
   struct dht_val *dv, rm;
-  SHA_CTX c;
-  __u8 secret_hash[SHA_DIGEST_LENGTH], value_hash[SHA_DIGEST_LENGTH];
+  SHA256_CTX c;
+  __u8 secret_hash[SHA256_DIGEST_LENGTH], value_hash[SHA256_DIGEST_LENGTH];
   int rm_ttl = 0, value_hash_len;
 
   int retry = ((mode & 0x00F0) == XMLRPC_MODE_RETRY_ON);
@@ -973,12 +973,12 @@ int hip_xmlrpc_getput(int mode, char *app, struct sockaddr *server,
       /*
        * produce hashes of the secret and the value, for later removal
        */
-      SHA1_Init(&c);
-      SHA1_Update(&c, value, *value_len);
-      SHA1_Final(value_hash, &c);
-      SHA1_Init(&c);
-      SHA1_Update(&c, secret, secret_len);
-      SHA1_Final(secret_hash, &c);
+      SHA256_Init(&c);
+      SHA256_Update(&c, value, *value_len);
+      SHA256_Final(value_hash, &c);
+      SHA256_Init(&c);
+      SHA256_Update(&c, secret, secret_len);
+      SHA256_Final(secret_hash, &c);
 
       /*
        * check if we already published a record with this key; record
@@ -1000,8 +1000,8 @@ int hip_xmlrpc_getput(int mode, char *app, struct sockaddr *server,
         }
       strncpy(dv->app, app, sizeof(dv->app) - 1);
       dv->app[sizeof(dv->app) - 1] = '\0';
-      dv->value_hash_len = SHA_DIGEST_LENGTH;
-      memcpy(dv->value_hash, value_hash, SHA_DIGEST_LENGTH);
+      dv->value_hash_len = SHA256_DIGEST_LENGTH;
+      memcpy(dv->value_hash, value_hash, SHA256_DIGEST_LENGTH);
       dv->secret_len = secret_len;
       memcpy(dv->secret, secret, secret_len);
       dv->expire_time.tv_usec = now.tv_usec;
@@ -1051,8 +1051,8 @@ int hip_xmlrpc_getput(int mode, char *app, struct sockaddr *server,
       xml_new_param(node, "base64", (char *)val64);             /* value */
       xml_new_param(node, "string", "SHA");                     /* hash type */
       memset(tmp, 0, sizeof(tmp));
-      memcpy(tmp, secret_hash, SHA_DIGEST_LENGTH);
-      EVP_EncodeBlock(val64, tmp, SHA_DIGEST_LENGTH);
+      memcpy(tmp, secret_hash, SHA256_DIGEST_LENGTH);
+      EVP_EncodeBlock(val64, tmp, SHA256_DIGEST_LENGTH);
       xml_new_param(node, "base64", (char *)val64);            /* secret_hash */
       sprintf((char *)tmp, "%d", ttl);
       xml_new_param(node, "int", (char *)tmp);                  /* lifetime */
@@ -1064,8 +1064,8 @@ int hip_xmlrpc_getput(int mode, char *app, struct sockaddr *server,
       break;
     case XMLRPC_MODE_RM:
       memset(tmp, 0, sizeof(tmp));
-      memcpy(tmp, value_hash, SHA_DIGEST_LENGTH);
-      EVP_EncodeBlock(val64, tmp, SHA_DIGEST_LENGTH);
+      memcpy(tmp, value_hash, SHA256_DIGEST_LENGTH);
+      EVP_EncodeBlock(val64, tmp, SHA256_DIGEST_LENGTH);
       xml_new_param(node, "base64", (char *)val64);             /* value_hash */
       xml_new_param(node, "string", "SHA");                     /* hash type */
       memset(tmp, 0, sizeof(tmp));

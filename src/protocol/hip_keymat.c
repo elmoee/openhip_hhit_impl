@@ -60,7 +60,6 @@
  */
 int set_secret_key(unsigned char *key, hip_assoc *hip_a)
 {
-  int keylen;
 
   if (NULL == key)
     {
@@ -68,7 +67,6 @@ int set_secret_key(unsigned char *key, hip_assoc *hip_a)
       return(-1);
     }
 
-  keylen = DH_size(hip_a->dh);
   if (hip_a->dh_secret)
     {
       free(hip_a->dh_secret);
@@ -77,11 +75,11 @@ int set_secret_key(unsigned char *key, hip_assoc *hip_a)
 
 #ifndef HIP_VPLS
   log_(NORM, "************\nDH secret key set to:\n0x");
-  print_hex(hip_a->dh_secret, keylen);
+  print_hex(hip_a->dh_secret, hip_a -> dh_secret_len);
   log_(NORM, "\n***********\n");
 #endif
 
-  return(keylen);
+  return(hip_a -> dh_secret_len);
 }
 
 /*
@@ -144,18 +142,28 @@ void compute_keys(hip_assoc *hip_a)
   draw_keys(hip_a, TRUE, 0);
 }
 
+void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
+
+  SHA256_CTX c_256;
+
+  SHA256_Init(&c_256);
+  SHA256_Update(&c_256, hashdata, location);
+  SHA256_Final(hash, &c_256);
+}
+
 /*
  * Compute a new keymat based on the DH secret Kij and HITs
  */
+
 int compute_keymat(hip_assoc *hip_a)
 {
   int i, result;
   int location, len, dh_secret_len, hashdata_len;
   char *hashdata;
-  unsigned char hash[SHA_DIGEST_LENGTH], last_byte = 1;
+  int sha_key_len = auth_key_len_hit_suite(hip_a->hit_suite);
+  unsigned char hash[sha_key_len], last_byte = 1;
   BIGNUM *hit1, *hit2;
   hip_hit *hitp;
-  SHA_CTX c;
 
   if (hip_a == NULL)
     {
@@ -173,7 +181,7 @@ int compute_keymat(hip_assoc *hip_a)
   result = BN_ucmp(hit1, hit2);
 
   /* Kij */
-  dh_secret_len = DH_size(hip_a->dh);
+  dh_secret_len = (hip_a -> dh_secret_len);
   hashdata_len = dh_secret_len + (2 * HIT_SIZE) + (2 * sizeof(__u64)) + 1;
   hashdata = malloc(hashdata_len);
   memcpy(hashdata, hip_a->dh_secret, dh_secret_len);
@@ -205,32 +213,28 @@ int compute_keymat(hip_assoc *hip_a)
   memcpy(&hashdata[location], &last_byte, sizeof(last_byte));
   location += sizeof(last_byte);
 
-  /* SHA1 hash the concatenation */
-  SHA1_Init(&c);
-  SHA1_Update(&c, hashdata, location);
-  SHA1_Final(hash, &c);
-  memcpy(hip_a->keymat, hash, SHA_DIGEST_LENGTH);
-  location = SHA_DIGEST_LENGTH;
+  /* SHA hash the concatenation */
+  compute_hash(hip_a, hashdata, hash, location);
+  memcpy(hip_a->keymat, hash, sha_key_len);
+  location = sha_key_len;
 
   /* compute K2 ... K38
    * 768 bytes / 20 bytes per hash = 38 loops
    * this is enough space for 32 ESP keys
    */
-  for (i = 1; i < (KEYMAT_SIZE / SHA_DIGEST_LENGTH); i++)
+  for (i = 1; i < (KEYMAT_SIZE / sha_key_len); i++)
     {
       last_byte++;
       memcpy(hashdata, hip_a->dh_secret, dh_secret_len);           /* Kij */
       len = dh_secret_len;
-      memcpy(&hashdata[len], hash, SHA_DIGEST_LENGTH);           /* K_i) */
-      len += SHA_DIGEST_LENGTH;
+      memcpy(&hashdata[len], hash, sha_key_len);           /* K_i) */
+      len += sha_key_len;
       memcpy(&hashdata[len], &last_byte, sizeof(last_byte));           /* i+1 */
       len += sizeof(last_byte);
-      SHA1_Init(&c);
-      SHA1_Update(&c, hashdata, len);
-      SHA1_Final(hash, &c);
+      compute_hash(hip_a, hashdata, hash, len);
       /* accumulate the keying material */
-      memcpy(&hip_a->keymat[location], hash, SHA_DIGEST_LENGTH);
-      location += SHA_DIGEST_LENGTH;
+      memcpy(&hip_a->keymat[location], hash, sha_key_len);
+      location += sha_key_len;
     }
   free(hashdata);
   BN_free(hit1);
@@ -268,7 +272,7 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index)
       hip_a->keys[i].type = 0;
     }
 
-  log_(NORM, "Using HIP transform of %d", hip_a->hip_transform);
+  log_(NORM, "Using HIP transform of %d", hip_a->hip_cipher);
   if (draw_hip_keys)
     {
       log_(NORM, ".\nDrawing new HIP encryption/integrity keys:\n");
@@ -289,13 +293,13 @@ int draw_keys(hip_assoc *hip_a, int draw_hip_keys, int keymat_index)
         {
         case GL_HIP_ENCRYPTION_KEY:             /* ENCRYPTED payload keys */
         case LG_HIP_ENCRYPTION_KEY:
-          key_type = hip_a->hip_transform;
-          len = enc_key_len(key_type);
+          key_type = hip_a->hip_cipher;
+          len = enc_key_len_hip_cipher(key_type);
           break;
         case GL_HIP_INTEGRITY_KEY:              /* HMAC keys */
         case LG_HIP_INTEGRITY_KEY:
-          key_type = hip_a->hip_transform;
-          len = auth_key_len(key_type);
+          key_type = hip_a->hit_suite;
+          len = auth_key_len_hit_suite(key_type);
           break;
         case GL_ESP_ENCRYPTION_KEY:             /* ESP encryption keys */
         case LG_ESP_ENCRYPTION_KEY:
@@ -372,6 +376,22 @@ int draw_mr_key(hip_assoc *hip_a, int keymat_index)
   return(location);
 }
 
+int auth_key_len_hit_suite(int suite_id)
+{
+  switch (suite_id)
+  {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      return(KEY_LEN_SHA256);
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      return(KEY_LEN_SHA384);
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      return(KEY_LEN_SHA1);
+    default:
+      break;
+  }
+  return(0);
+}
+
 int auth_key_len(int suite_id)
 {
   switch (suite_id)
@@ -405,15 +425,30 @@ int enc_key_len(int suite_id)
   return(0);
 }
 
-int enc_iv_len(int suite_id)
+int enc_key_len_hip_cipher(int hip_cipher_id)
 {
-  switch (suite_id)
+  switch (hip_cipher_id)
+  {
+    case HIP_CIPHER_AES128_CBC:
+      return(KEY_LEN_AES128);
+    case HIP_CIPHER_AES256_CBC:
+      return(KEY_LEN_AES256);
+    case HIP_CIPHER_NULL_ENCRYPT:
+      return(KEY_LEN_NULL);
+    default:
+      break;
+  }
+  return(0);
+}
+
+int enc_iv_len(int hip_cipher_id)
+{
+  switch (hip_cipher_id)
     {
-    case ESP_AES128_CBC_HMAC_SHA1:
-    case ESP_AES128_CBC_HMAC_SHA256:
-    case ESP_AES256_CBC_HMAC_SHA256:
+    case HIP_CIPHER_AES128_CBC:
+    case HIP_CIPHER_AES256_CBC:
       return(16);               /* AES uses 128-bit IV */
-    case ESP_NULL_HMAC_SHA256:
+    case HIP_CIPHER_NULL_ENCRYPT:
       return(0);
     default:
       break;

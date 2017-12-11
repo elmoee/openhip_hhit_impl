@@ -178,7 +178,7 @@ int main_loop(int argc, char **argv)
    * Set default configuration
    * later modified by command-line parameters or conf file
    */
-  memset(&HCNF, 0, sizeof(struct hip_conf));
+  memset(&HCNF,	0,	sizeof(struct hip_conf));
   HCNF.cookie_difficulty = 10;
   HCNF.cookie_lifetime = 39;       /* 2^(39-32) = 2^7 = 128 seconds */
   HCNF.packet_timeout = 5;
@@ -187,14 +187,20 @@ int main_loop(int argc, char **argv)
   HCNF.loc_lifetime = 1800;       /* 30 minutes */
   HCNF.preferred_hi = NULL;
   HCNF.send_hi_name = TRUE;
-  HCNF.dh_group = DEFAULT_DH_GROUP_ID;
+  HCNF.dh_group = 0;
+  HCNF.dh_group_list[0] = DH_SECP160R1;
+  HCNF.dh_group_list[1] = DH_MODP_1536;
+  HCNF.hip_ciphers[0] = HIP_CIPHER_AES128_CBC;
+  HCNF.hip_ciphers[1] = HIP_CIPHER_AES256_CBC;
+  HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+  HCNF.hit_suite_list[1] = HIT_SUITE_4BIT_ECDSA_SHA384;
   HCNF.dh_lifetime = 900;
   HCNF.r1_lifetime = 300;
   HCNF.msl = 5;
   HCNF.ual = 600;
   HCNF.failure_timeout = (HCNF.max_retries * HCNF.packet_timeout);
   HCNF.icmp_timeout = 0;
-  for (i = 0; i < (SUITE_ID_MAX - 1); i++)
+  for (i = 0; i < (ESP_MAX - 1); i++)
     {
       HCNF.esp_transforms[i] = HCNF.hip_transforms[i] = (__u16)(i + 1);
     }
@@ -508,7 +514,6 @@ int main_loop(int argc, char **argv)
   hip_mr_set_external_ifs();
 #endif /* !__WIN32__ */
   /* Precompute R1s, cookies, DH material */
-  init_dh_cache();
   init_all_R1_caches();
   gettimeofday(&time1, NULL);
   last_expire = time1.tv_sec;
@@ -675,11 +680,15 @@ int main_loop(int argc, char **argv)
             {
               last_expire = time1.tv_sec;
               /* expire old DH contexts */
-              expire_old_dh_entries();
-              /* precompute a new R1 for each HI, and
-               * sometimes pick a new random index for
-               * cookies */
-              replace_next_R1();
+              for(int i = 0; i < DH_MAX; ++i){
+                if(HCNF.dh_group_list[i] > 0){
+                  expire_old_dh_entries(HCNF.dh_group_list[i]);
+                  /* precompute a new R1 for each HI, and
+                   * sometimes pick a new random index for
+                   * cookies */
+                  replace_next_R1(HCNF.dh_group_list[i]);
+                }
+              }
             }
           if (OPT.trigger)
             {
@@ -956,6 +965,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
       /* attempt to send a NOTIFY packet */
       if (VALID_FAM(src) && VALID_FAM(dst) && hiph)
         {
+
           hip_a = find_hip_association(src, dst, hiph);
           if ((hip_a) && (hip_a->state >= I1_SENT) &&
               (hip_a->state < E_FAILED))
@@ -994,6 +1004,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
 
   /* lookup using addresses and HITs */
   hip_a = find_hip_association(src, dst, hiph);
+
   /* for opportunistic HIP, adopt unknown HIT from R1 */
   if ((hip_a == NULL) && OPT.opportunistic &&
       (hiph->packet_type == HIP_R1))
@@ -1017,6 +1028,7 @@ void hip_handle_packet(struct msghdr *msg, int length, __u16 family)
       ((hiph->packet_type == UPDATE) || (hiph->packet_type == HIP_R1)))
     {
       hip_a = find_hip_association2(hiph);
+      log_(WARN, "DHT lookup !! \n");
     }
 
   /* UPDATE packet might be for RVS client. */

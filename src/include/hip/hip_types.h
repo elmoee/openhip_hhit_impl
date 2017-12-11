@@ -104,7 +104,7 @@
  * IPsec-related constants
  */
 #define DSA_PRIV 20 /* Size in bytes of DSA private key and Q value */
-#define HIP_KEY_SIZE 32 /* Must be large enough to hold largest possible key */
+#define HIP_KEY_SIZE 48 /* Must be large enough to hold largest possible key */
 #define HIP_DSA_SIG_SIZE 41 /* T(1) + R(20) + S(20)  from RFC 2536 */
 #define MAX_SIG_SIZE 512 /* RFC 3110 4096-bits max RSA length */
 #define NUMKEYS 8 /* HIP, HMAC, HIP, HMAC, ESP, AUTH, ESP, AUTH */
@@ -289,7 +289,7 @@ struct rekey_info {
   __u16 keymat_index;           /* keymat index			*/
   __u8 need_ack;       /* set to FALSE when update_id has been ACKed */
   __u8 dh_group_id;             /* new DH group given by peer	*/
-  DH *dh;                       /* new DH given by the peer	*/
+  EVP_PKEY *dh;                       /* new DH given by the peer	*/
   struct timeval rk_time;       /* creation time, so struct can be freed */
 };
 
@@ -359,13 +359,16 @@ typedef struct _hip_assoc {
   struct _tlv_from *from_via;       /* including FROM in I1 or VIA RVS in R1 */
   struct multihoming_info *mh;       /* state for loss multihoming */
   /* Other crypto */
+  __u16 hip_cipher;
   __u16 hip_transform;
   __u16 esp_transform;
+  __u8 hit_suite;
   __u16 available_transforms;       /* bit mask used to flag available xfrms */
   __u8 dh_group_id;
-  DH *dh;
-  DH *peer_dh;          /* needed for rekeying */
+  EVP_PKEY *evp_dh;
+  EVP_PKEY *peer_dh;          /* needed for rekeying */
   __u8 *dh_secret;       /* without packing, these cause memset segfaults! */
+  size_t dh_secret_len;
   __u16 keymat_index;
   __u16 mr_keymat_index;
   __u8 keymat[KEYMAT_SIZE];
@@ -477,17 +480,17 @@ typedef struct _hi_node {
   int size;                     /* Size in bytes of the Host Identity	*/
   DSA *dsa;                     /* HI in DSA format			*/
   RSA *rsa;                     /* HI in RSA format			*/
-  struct _r1_cache_entry r1_cache[R1_CACHE_SIZE];       /* the R1 cache	*/
+  struct _r1_cache_entry r1_cache [DH_MAX][R1_CACHE_SIZE];       /* the R1 cache	*/
   __u64 r1_gen_count;           /* R1 generation counter		*/
   __u32 update_id;              /* this host's Update ID		*/
   /* Options */
   char algorithm_id;
-  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
   char name[MAX_HI_NAMESIZE];
   int name_len;                 /* use this instead of strlen()		*/
+  char hit_suite_id;
 } hi_node;
 
 #ifdef HIP_VPLS
@@ -497,12 +500,12 @@ struct peer_node
   int size;       /* Size in bytes of the Host Identity   */
   __u64 r1_gen_count;
   char algorithm_id;
-  char hit_suite_id;
   char anonymous;
   char allow_incoming;
   char skip_addrcheck;
   char name[MAX_HI_NAMESIZE];
   struct _sockaddr_list **rvs_addrs;
+  char hit_suite_id;
 };
 #endif /* HIP_VPLS */
 
@@ -512,7 +515,7 @@ typedef struct _dh_cache_entry
 {
   struct _dh_cache_entry *next;         /* the cache is a linked-list   */
   __u8 group_id;                        /* can have various group_ids   */
-  DH *dh;                               /* the Diffie-Hellman context	*/
+  EVP_PKEY *evp_dh;                               /* the Diffie-Hellman context	*/
   __u8 is_current;                      /* if this is the latest DH context
                                          *  for this group_id, then TRUE */
   int ref_count;        /* number of hip_assoc that point to this entry */
@@ -589,29 +592,35 @@ typedef struct _tlv_solution
   __u64 j;
 } tlv_solution;
 
+typedef	struct	_tlv_dh_group_list
+{
+    __u16	type;
+    __u16	length;
+    __u8	group_id;
+} tlv_dh_group_list;
+
 typedef struct _tlv_diffie_hellman
 {
   __u16 type;
   __u16 length;
   __u8 group_id;
   __u16 pub_len;
-  __u8 pub[1];       /* variable length */
+  __u8 pub[0];       /* variable length */
 } __attribute__ ((packed)) tlv_diffie_hellman;
 
-/* used for second DH public value */
-typedef struct _tlv_diffie_hellman_pub_value
-{
-  __u8 group_id;
-  __u16 pub_len;
-  __u8 pub[1];       /* variable length */
-} __attribute__ ((packed)) tlv_diffie_hellman_pub_value;
-
-typedef struct _tlv_hip_transform
+typedef struct _tlv_hip_cipher
 {
   __u16 type;
   __u16 length;
-  __u16 transform_id;
-} tlv_hip_transform;
+  __u16 cipher_id;
+} tlv_hip_cipher;
+
+typedef struct _tlv_hit_suite
+{
+  __u16 type;
+  __u16 length;
+  __u8 hit_suite_id;
+} tlv_hit_suite;
 
 typedef struct _tlv_esp_transform
 {
@@ -706,7 +715,7 @@ typedef struct _tlv_hmac
 {
   __u16 type;
   __u16 length;
-  __u8 hmac[20];
+  __u8 hmac[64];
 } tlv_hmac;
 
 typedef struct _tlv_hip_sig
@@ -881,8 +890,10 @@ struct hip_conf {
   __u32 ual;                            /* seconds until unused SA expires */
   __u32 icmp_timeout;                   /* seconds until again respond to ICMP
                                          * after a successfule ICMP UPDATE */
-  __u16 esp_transforms[SUITE_ID_MAX];       /* ESP transforms proposed in R1 */
-  __u16 hip_transforms[SUITE_ID_MAX];       /* HIP transforms proposed in R1 */
+  __u16 esp_transforms[ESP_MAX];       /* ESP transforms proposed in R1 */
+  __u16 hip_transforms[ESP_MAX];       /* HIP transforms proposed in R1 */
+  __u16 hip_ciphers[HIP_CIPHER_MAX];
+  __u8 hit_suite_list[HIT_SUITE_4BIT_MAX];
   char *log_filename;                   /* non-default pathname for log	     */
   struct sockaddr_storage dht_server;       /* address+port of DHT server    */
   struct sockaddr_storage dns_server;       /* address of server w/HIP RRs   */
@@ -918,6 +929,8 @@ struct hip_conf {
   char conf_filename[255];
   char my_hi_filename[255];
   char known_hi_filename[255];
+  __u8 dh_group_list[DH_MAX];
+
 };
 
 #endif /* _HIP_TYPES_H_*/
