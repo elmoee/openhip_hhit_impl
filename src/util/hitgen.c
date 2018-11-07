@@ -538,7 +538,7 @@ void print_hitgen_usage()
   printf(" -file <file> \t write output to the specified file\n");
   printf(" -append\t append identity if file already exists\n");
   printf("Host identitiy generation:\n");
-  printf(" -type \tfollowed by \"DSA\" or \"RSA\" specifies key type\n");
+  printf(" -type \t\t followed by \"DSA\", \"RSA\" or \"ECDSA\" specifying the key type\n");
   printf(" -bits \t\t specifies the length in bits for (P,G,Y)\n");
   printf(" -length \t specifies the length in bytes for (P,G,Y)\n");
   printf(" -anon \t\t sets the anonymous flag for this HI\n");
@@ -652,14 +652,17 @@ int main(int argc, char *argv[])
           argv++, argc--;
           if (strcmp(*argv, "DSA") == 0)
             {
+              opts.hit_suite_id = 1;
               opts.type = HI_ALG_DSA;
             }
           else if (strcmp(*argv, "RSA") == 0)
             {
+              opts.hit_suite_id = 1;
               opts.type = HI_ALG_RSA;
             }
           else if (strcmp(*argv, "ECDSA") == 0)
             {
+              opts.hit_suite_id = 2;
               opts.type = HI_ALG_ECDSA;
             }
           else
