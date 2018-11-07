@@ -57,6 +57,7 @@
 #include <openssl/bn.h>
 #include <openssl/hmac.h>
 #include <openssl/rsa.h>
+#include <openssl/ecdsa.h>
 #include <time.h>
 
 #include <hip/hip_proto.h>
@@ -480,6 +481,7 @@ typedef struct _hi_node {
   int size;                     /* Size in bytes of the Host Identity	*/
   DSA *dsa;                     /* HI in DSA format			*/
   RSA *rsa;                     /* HI in RSA format			*/
+  EC_KEY *ecdsa;                /* HI in ECDSA format			*/
   struct _r1_cache_entry r1_cache [DH_MAX][R1_CACHE_SIZE];       /* the R1 cache	*/
   __u64 r1_gen_count;           /* R1 generation counter		*/
   __u32 update_id;              /* this host's Update ID		*/

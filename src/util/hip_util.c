@@ -2258,6 +2258,15 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
           len++;
         }
       break;
+    case HI_ALG_ECDSA:     /* RFC 4754 */
+      if (!hi->ecdsa)
+        {
+          log_(WARN, "hi_to_hit(): NULL ecdsa\n");
+          return(-1);
+        }
+      len = sizeof(khi_context_id);
+      len += 512;
+      break;
     default:
       log_(WARN, "hi_to_hit(): invalid algorithm (%d)\n",
            hi->algorithm_id);

@@ -39,6 +39,7 @@
 #include <openssl/dsa.h>
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
+#include <openssl/obj_mac.h>
 #include <libxml/encoding.h>
 #include <libxml/xmlIO.h>
 #include <libxml/tree.h>
@@ -107,9 +108,12 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   BIO *bp;
   DSA *dsa = NULL;
   RSA *rsa = NULL;
-
+  EC_KEY* ecdsa = NULL;
   printf("Generating a %d-bit %s key\n",
          opts->bitsize, HI_TYPESTR(opts->type));
+
+  
+  
   if (opts->bitsize < 512)
     {
       printf("Error: bit size too small. ");
@@ -155,6 +159,26 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
           exit(1);
         }
       break;
+    case HI_ALG_ECDSA:
+      {
+      int success;
+      printf("ecdsa");
+      ecdsa = EC_KEY_new_by_curve_name(NID_secp256k1);
+      if(!ecdsa)
+        {
+          fprintf(stderr, "EC_KEY_new_by_curve_name() failed.\n");
+          exit(1);
+        }
+      printf("Generating ECDSA keys for HI...");
+      success = EC_KEY_generate_key(ecdsa);
+
+      if (!success)
+        {
+          fprintf(stderr, "ECDSA_generate_key() failed.\n");
+          exit(1);
+        }
+      break;
+      }
     default:
       printf("Error: generate_HI() got invalid HI type\n");
       exit(1);
@@ -205,10 +229,30 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
       xmlNewChild(hi, NULL, BAD_CAST "iqmp",
                   BAD_CAST BN_bn2hex(rsa->iqmp));
       break;
+    case HI_ALG_ECDSA: 
+      // Able to choose curve?
+      sprintf(tmp, "%d", NID_secp256k1);
+      xmlNewChild(hi, NULL, BAD_CAST "CURVE", BAD_CAST tmp);
+      xmlNewChild(
+        hi, 
+        NULL, 
+        BAD_CAST "PRIV", 
+        BAD_CAST BN_bn2hex(EC_KEY_get0_private_key(ecdsa))
+      );
+      xmlNewChild(
+        hi, 
+        NULL, 
+        BAD_CAST "PUB", 
+        BAD_CAST EC_POINT_point2hex(
+                    EC_KEY_get0_group(ecdsa),
+                    EC_KEY_get0_public_key(ecdsa),
+                    POINT_CONVERSION_UNCOMPRESSED,
+                    BN_CTX_new())
+      );
+      break;
     default:
       break;
     }
-
   /*
    * calculate and store the HIT
    */
@@ -221,6 +265,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   hostid.hit_suite_id = opts->hit_suite_id;
   hostid.rsa = rsa;
   hostid.dsa = dsa;
+  hostid.ecdsa = ecdsa;
 
   hit.ss_family = AF_INET6;
   hitp = SA2IP(&hit);
@@ -612,6 +657,10 @@ int main(int argc, char *argv[])
           else if (strcmp(*argv, "RSA") == 0)
             {
               opts.type = HI_ALG_RSA;
+            }
+          else if (strcmp(*argv, "ECDSA") == 0)
+            {
+              opts.type = HI_ALG_ECDSA;
             }
           else
             {

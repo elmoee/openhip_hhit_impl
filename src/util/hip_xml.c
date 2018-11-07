@@ -306,7 +306,32 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
             {
               BN_hex2bn(&hi->rsa->iqmp, data);
             }
-          break;
+            break;
+          case HI_ALG_ECDSA:
+            if (strcmp((char *)node->name, "CURVE") == 0)
+              {
+                int curve;
+                sscanf(data, "%x", &curve);
+                EC_KEY_set_group(hi->ecdsa, EC_GROUP_new_by_curve_name(curve));
+              }
+            if (strcmp((char *)node->name, "PUB") == 0)
+              {
+                EC_POINT* pub = EC_POINT_new(EC_KEY_get0_group(hi->ecdsa));
+                EC_POINT_hex2point(
+                    EC_KEY_get0_group(hi->ecdsa),
+                    data,
+                    pub,
+                    BN_CTX_new()
+                );
+                EC_KEY_set_public_key(hi->ecdsa, pub);
+              }
+            else if (strcmp((char *)node->name, "PRIV") == 0)
+              {
+                BIGNUM* priv = BN_new();
+                BN_hex2bn(&priv, data);
+                EC_KEY_set_private_key(hi->ecdsa, priv);
+              }
+            break;
         default:
           break;
         }
@@ -548,6 +573,8 @@ int read_identities_file(char *filename, int mine)
             case HI_ALG_RSA:
               hi->rsa = RSA_new();
               break;
+            case HI_ALG_ECDSA:
+              hi->ecdsa = EC_KEY_new();
             default:
               if (mine)
                 {
@@ -714,7 +741,7 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
  *
  * Helper to add big number hex string as a child of the given XML node.
  */
-void xmlNewChild_from_bn(xmlNodePtr node, BIGNUM *bn, char *name)
+void xmlNewChild_from_bn(xmlNodePtr node, const BIGNUM *bn, char *name)
 {
   char *cp = BN_bn2hex(bn);
   xmlNewChild(node, NULL, BAD_CAST name, BAD_CAST cp);
@@ -807,6 +834,20 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
           xmlNewChild_from_bn(hi, h->rsa->dmp1, "dmp1");
           xmlNewChild_from_bn(hi, h->rsa->dmq1, "dmq1");
           xmlNewChild_from_bn(hi, h->rsa->iqmp, "iqmp");
+        case HI_ALG_ECDSA:
+          xmlNewChild(hi, NULL, BAD_CAST "CURVE", BAD_CAST tmp);
+          xmlNewChild_from_bn(hi, EC_KEY_get0_private_key(h->ecdsa), "PRIV");
+          xmlNewChild(
+            hi, 
+            NULL, 
+            BAD_CAST "PUB", 
+            BAD_CAST EC_POINT_point2hex(
+                        EC_KEY_get0_group(h->ecdsa),
+                        EC_KEY_get0_public_key(h->ecdsa),
+                        POINT_CONVERSION_UNCOMPRESSED,
+                        BN_CTX_new())
+          );
+          break;
         default:
           break;
         }
