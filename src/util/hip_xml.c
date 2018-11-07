@@ -575,12 +575,13 @@ int read_identities_file(char *filename, int mine)
               break;
             case HI_ALG_ECDSA:
               hi->ecdsa = EC_KEY_new();
+              break;
             default:
               if (mine)
                 {
                   log_(WARN, "Unknown algorithm found ");
                   log_(WARN, "in XML file for %s: %u\n",
-                       hi->name, hi->algorithm_id);
+                       (char *)node->name, hi->algorithm_id);
                   free_hi_node(hi);
                   continue;
                 }
