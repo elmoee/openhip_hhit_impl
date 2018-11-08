@@ -396,6 +396,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
   int offset = 0, key_len = 0;
   char t;
   __u16 e_len = 0;
+  __u16 curve = 0;
   hi_node *hi;
 
   /* for DSA:			for RSA:
@@ -470,6 +471,17 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
             }
         }
       break;
+    case HI_ALG_ECDSA:
+        curve = (__u16) data[0];
+        curve = ntohs(curve);
+        key_len = hi_length - 2;
+        // TODO: define constants 65 and 33 uncompressed and compressed
+        if (key_len != 65 && key_len != 33)
+          {
+            log_(WARN, "ECDSA invalid public key length%d \n", key_len);
+            return(-1);
+          }
+        break;
     default:
       log_(WARN, "Invalid HI type in RDATA: %u\n", alg);
       if (!OPT.permissive)
@@ -499,6 +511,12 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       log_(WARN, "Parsing HI and RSA already exists.\n");
       return(-1);
     }
+  else if ((alg == HI_ALG_ECDSA) && hi->ecdsa)
+    {
+      log_(WARN, "Parsing HI and ECDSA already exists.\n");
+      return(-1);
+    }
+
   hi->algorithm_id = alg;
   hi->size = key_len;
 
@@ -531,6 +549,19 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       hi->rsa->n = BN_bin2bn(&data[offset], key_len, 0);
 #ifndef HIP_VPLS
       log_(NORM, "Found RSA HI with public modulus: 0x");
+      print_hex((char *)&data[offset], key_len);
+      log_(NORM, "\n");
+#endif
+    case HI_ALG_ECDSA:
+      hi->ecdsa = EC_KEY_new_by_curve_name(curve);
+      const EC_GROUP* group = EC_KEY_get0_group(hi->ecdsa);
+      EC_POINT* pub = EC_POINT_new(group);
+      BN_CTX* ctx = BN_CTX_new();
+      EC_POINT_oct2point(group, pub, &data[offset], key_len, ctx);
+      EC_KEY_set_public_key(hi->ecdsa, pub);
+      BN_CTX_free(ctx);
+#ifndef HIP_VPLS
+      log_(NORM, "Found ECDSA HI with public key: 0x");
       print_hex((char *)&data[offset], key_len);
       log_(NORM, "\n");
 #endif
