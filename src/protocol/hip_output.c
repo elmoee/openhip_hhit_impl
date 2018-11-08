@@ -2143,6 +2143,9 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
       /* public modulus */
       len += bn2bin_safe(hi->rsa->n, &data[len], RSA_size(hi->rsa));
       break;
+    case HI_ALG_ECDSA:
+      log_(WARN, "build_tlv_hostid not implemented for ECDSA\n");
+      break;
     default:
       break;
     }
