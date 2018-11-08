@@ -2205,7 +2205,8 @@ int khi_hi_input(hi_node *hi, __u8 *out)
       const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
       const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
       int curv_name = EC_GROUP_get_curve_name(ec_group);
-      out[location] = (__u16) curv_name;
+      __u16 *p =  (__u16*) &out[location];
+      *p = htons(curv_name);
       location += 2;
       size_t public_key_hex_size =  EC_POINT_point2oct(ec_group, ec_point,
                                                        POINT_CONVERSION_UNCOMPRESSED,
@@ -2284,7 +2285,7 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
           return(-1);
         }
       len = sizeof(khi_context_id);
-      len += 2; // Two bytes for the curv_name
+      len += 2;  // Two bytes for the curv_name
       len += 65; // 65 bytes for the public key (uncompressed), 
                  // 33 bytes if compressed. 
 
