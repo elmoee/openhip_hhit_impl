@@ -311,7 +311,7 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
             if (strcmp((char *)node->name, "CURVE") == 0)
               {
                 int curve;
-                sscanf(data, "%x", &curve);
+                sscanf(data, "%d", &curve);
                 EC_KEY_set_group(hi->ecdsa, EC_GROUP_new_by_curve_name(curve));
               }
             if (strcmp((char *)node->name, "PUB") == 0)
