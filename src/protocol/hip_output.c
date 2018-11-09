@@ -2045,7 +2045,6 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
 {
   int hi_len = 0;
-
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:            /*       tlv + T + Q + P,G,Y */
@@ -2069,6 +2068,15 @@ int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
           hi_len += 2;
         }
       break;
+    case HI_ALG_ECDSA:          /*        tlv + curve_len + public_key_len */
+      if (!hi->ecdsa)
+        {
+          log_(WARN, "No ECDSA context when building length!\n");
+          return(0);
+        }
+        hi_len = sizeof(tlv_host_id) + 2 + 65; // TODO: 33 if compressed
+      break;
+
     default:
       break;
     }
@@ -2144,8 +2152,25 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
       len += bn2bin_safe(hi->rsa->n, &data[len], RSA_size(hi->rsa));
       break;
     case HI_ALG_ECDSA:
-      log_(WARN, "build_tlv_hostid not implemented for ECDSA\n");
+      {
+      BN_CTX * bn_ctx = BN_CTX_new();
+      const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
+      const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
+      int curv_name = EC_GROUP_get_curve_name(ec_group);
+      __u16 *p =  (__u16*) &data[len];
+      *p = htons(curv_name);
+      len += 2;
+      size_t pk_size =  EC_POINT_point2oct(ec_group, ec_point,
+                                                       POINT_CONVERSION_UNCOMPRESSED,
+                                                       NULL, 0, bn_ctx);
+      
+      len += EC_POINT_point2oct(ec_group, ec_point,
+                                               POINT_CONVERSION_UNCOMPRESSED,
+                                               &data[len], pk_size,
+                                               bn_ctx);
+      BN_CTX_free(bn_ctx); 
       break;
+      }
     default:
       break;
     }
