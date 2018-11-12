@@ -472,7 +472,9 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
         }
       break;
     case HI_ALG_ECDSA:
-        curve = (__u16) data[0];
+      {
+        __u16* p = (__u16*) &data[0];
+        curve = *p;
         curve = ntohs(curve);
         key_len = hi_length - 2;
         // TODO: define constants 65 and 33 uncompressed and compressed
@@ -482,6 +484,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
             return(-1);
           }
         break;
+      }    
     default:
       log_(WARN, "Invalid HI type in RDATA: %u\n", alg);
       if (!OPT.permissive)
@@ -519,7 +522,6 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 
   hi->algorithm_id = alg;
   hi->size = key_len;
-
   /* read algorithm-specific key data */
   switch (alg)
     {
@@ -552,9 +554,12 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       print_hex((char *)&data[offset], key_len);
       log_(NORM, "\n");
 #endif
+      offset += key_len;
+      break;
     case HI_ALG_ECDSA:
+      offset = 2;
       hi->ecdsa = EC_KEY_new_by_curve_name(curve);
-      const EC_GROUP* group = EC_KEY_get0_group(hi->ecdsa);
+      const EC_GROUP* group = EC_GROUP_new_by_curve_name(curve);
       EC_POINT* pub = EC_POINT_new(group);
       BN_CTX* ctx = BN_CTX_new();
       EC_POINT_oct2point(group, pub, &data[offset], key_len, ctx);
@@ -915,6 +920,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->hi->size         = my_host_id->size;
   hip_a->hi->dsa          = my_host_id->dsa;
   hip_a->hi->rsa          = my_host_id->rsa;
+  hip_a->hi->ecdsa        = my_host_id->ecdsa;
   hip_a->hi->r1_gen_count = my_host_id->r1_gen_count;
   hip_a->hi->update_id    = my_host_id->update_id;
   hip_a->hi->algorithm_id = my_host_id->algorithm_id;

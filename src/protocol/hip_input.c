@@ -609,7 +609,6 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         {
           last_type = type;
         }
-
       /* First retrieve the HOST_ID and SIGNATURE before accepting
        * the rest of the R1 packet */
       if (!sig_verified && (type == PARAM_PUZZLE))
@@ -666,7 +665,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
           hiph->hdr_len = (len / 8) - 1;
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
-                                 hip_a->peer_hi->rsa) < 0)
+                                 hip_a->peer_hi->rsa,
+                                 hip_a->peer_hi->ecdsa) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -1506,7 +1506,8 @@ I2_ERROR:
           hiph->hdr_len = (len / 8) - 1;
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
-                                 hip_a->peer_hi->rsa) < 0)
+                                 hip_a->peer_hi->rsa,
+                                 hip_a->peer_hi->ecdsa) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -1896,7 +1897,8 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
           hiph->hdr_len = (len / 8) - 1;
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
-                                 hip_a->peer_hi->rsa) < 0)
+                                 hip_a->peer_hi->rsa,
+                                 hip_a->peer_hi->ecdsa) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -2144,7 +2146,8 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
           hiph->hdr_len = (len / 8) - 1;
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
-                                 hip_a->peer_hi->rsa) < 0)
+                                 hip_a->peer_hi->rsa,
+                                 hip_a->peer_hi->ecdsa) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -3273,7 +3276,8 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
           hiph->hdr_len = (len / 8) - 1;
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
-                                 hip_a->peer_hi->rsa) < 0)
+                                 hip_a->peer_hi->rsa,
+                                 hip_a->peer_hi->ecdsa) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -3494,7 +3498,8 @@ int hip_parse_notify(__u8 *data,
           hiph->hdr_len = (len / 8) - 1;
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
-                                 hip_a->peer_hi->rsa) < 0)
+                                 hip_a->peer_hi->rsa,
+                                 hip_a->peer_hi->ecdsa) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               /* Don't send NOTIFY responding to a NOTIFY
@@ -3702,7 +3707,7 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src)
   hiph->checksum = 0;
   hiph->hdr_len = (len / 8) - 1;
   if (validate_signature( data, location, tlv, peer_hi->dsa,
-                          peer_hi->rsa) < 0)
+                          peer_hi->rsa, peer_hi->ecdsa) < 0)
     {
       log_(WARN, "Invalid signature in BOS.\n");
       err = -1;
@@ -3737,19 +3742,20 @@ int hip_handle_CER(__u8 *data, hip_assoc *hip_a)
  * out:		Returns 0 if signature is correct, -1 if incorrect or error.
  */
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
-                       DSA *dsa, RSA *rsa)
+                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa)
 {
   int err;
   SHA256_CTX c;
   unsigned char md[SHA256_DIGEST_LENGTH];
   DSA_SIG dsa_sig;
+  ECDSA_SIG ecdsa_sig;
   int length, sig_len;
   tlv_hip_sig *sig = (tlv_hip_sig*)tlv;
   __u8 alg;
 
   length = ntohs(sig->length);
   alg = sig->algorithm;
-
+  log_(WARN, "Validating signature..\n");
   switch (alg)
     {
     case HI_ALG_DSA:
@@ -3790,6 +3796,24 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
             }
         }
       break;
+    case HI_ALG_ECDSA:
+      if (!ecdsa)
+        {
+          log_(WARN, "validate_signature(): ");
+          log_(NORM, "no ECDSA context!\n");
+          return(-1);
+        }
+        if (length != 1 + HIP_ECDSA256_SIG_SIZE)
+        {
+          log_(WARN, "Invalid ECDSA signature size of %d ",
+               length);
+          log_(NORM, "(should be %d).\n", 1 + HIP_ECDSA256_SIG_SIZE);
+          if (!OPT.permissive)
+            {
+              return(-1);
+            }
+        }
+        break;
     default:
       log_(WARN, "Invalid signature algorithm.\n");
       return(-1);
@@ -3821,6 +3845,13 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
       /* verify the RSA signature */
       err = RSA_verify(NID_sha1, md, SHA256_DIGEST_LENGTH,
                        sig->signature, sig_len, rsa);
+      break;
+    case HI_ALG_ECDSA:
+      ecdsa_sig.r = BN_bin2bn(&sig->signature[0], 32, NULL);
+      ecdsa_sig.s = BN_bin2bn(&sig->signature[32], 32, NULL);
+      err = ECDSA_do_verify(md, SHA256_DIGEST_LENGTH, &ecdsa_sig, ecdsa);
+      BN_free(ecdsa_sig.r);
+      BN_free(ecdsa_sig.s);
       break;
     default:
       err = -1;
@@ -3877,10 +3908,12 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
               hmac_md, &hmac_md_len  );
       break;
     case HIT_SUITE_4BIT_ECDSA_SHA384:
-      HMAC(   EVP_sha384(),
+      HMAC(   EVP_sha256(),
+        //EVP_sha384(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
+      break;
     case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       HMAC(   EVP_sha1(),
               key, key_len,
@@ -4202,7 +4235,6 @@ int handle_hi(hi_node **hi_p, const __u8 *data)
   alg = hi_hdr & 0xFF;       /* get algorithm from last byte of RDATA header */
   hi_length -= 4;               /* subtract RDATA length from HI length */
   length -= 8;                  /* subtract TLV fields and RDATA length */
-
   return(key_data_to_hi(  &data[sizeof(tlv_host_id)],
                           alg, hi_length, (__u8)di_type, di_length,
                           hi_p, length ));

@@ -383,7 +383,8 @@ int auth_key_len_hit_suite(int suite_id)
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       return(KEY_LEN_SHA256);
     case HIT_SUITE_4BIT_ECDSA_SHA384:
-      return(KEY_LEN_SHA384);
+      //return(KEY_LEN_SHA384);
+      return(KEY_LEN_SHA256);
     case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       return(KEY_LEN_SHA1);
     default:

@@ -575,10 +575,10 @@ int hip_send_I2(hip_assoc *hip_a)
   enc->type = htons(PARAM_ENCRYPTED);
   memset(enc->reserved, 0, sizeof(enc->reserved));
   iv_len = enc_iv_len(hip_a->hip_cipher);
-
+  log_(WARN, "send i2 build tlv hostid len\n");
   /* inner padding is 8-byte aligned */
   data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
-
+  log_(WARN, "send i2 build tlv hostid len\n");
   /* AES has 128-bit IV/block size with which we need to align */
   if (iv_len > 8)
     {
@@ -2309,6 +2309,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
   SHA256_CTX c;
   unsigned char md[SHA256_DIGEST_LENGTH] = {0};
   DSA_SIG *dsa_sig;
+  ECDSA_SIG *ecdsa_sig;
   tlv_hip_sig *sig;
   unsigned int sig_len = 0;
   int err;
@@ -2366,6 +2367,14 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
                ERR_error_string(ERR_get_error(), NULL));
         }
       break;
+    case HI_ALG_ECDSA: /* RFC 4754 */
+      sig_len = HIP_ECDSA256_SIG_SIZE;
+      memset(sig->signature, 0, sig_len);
+      ecdsa_sig = ECDSA_do_sign(md, SHA256_DIGEST_LENGTH, hi->ecdsa);
+      bn2bin_safe(ecdsa_sig->r, &sig->signature[0], 32);
+      bn2bin_safe(ecdsa_sig->s, &sig->signature[32], 32);
+      ECDSA_SIG_free(ecdsa_sig);
+      break;
     default:
       break;
     }
@@ -2406,6 +2415,14 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
     {
     //  case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:  Not implemented
     //  case HIT_SUITE_4BIT_ECDSA_SHA384: Not implemented
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      HMAC(   //EVP_sha384(),
+              EVP_sha256(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len_hit_suite(hip_a->hit_suite),
+              data, location,
+              hmac_md, &hmac_md_len  );
+      break;
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
