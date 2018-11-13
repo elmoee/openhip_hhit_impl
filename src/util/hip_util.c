@@ -2323,8 +2323,12 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
         }
       len = sizeof(khi_context_id);
       len += 2;  // Two bytes for the curv_name
-      len += 65; // 65 bytes for the public key (uncompressed), 
-                 // 33 bytes if compressed. 
+      // Get key lenght and add to len
+      const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
+      const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
+      len +=  EC_POINT_point2oct(ec_group, ec_point,
+                                 POINT_CONVERSION_UNCOMPRESSED,
+                                 NULL, 0, 0);
 
       break;
     default:
