@@ -190,6 +190,17 @@ const unsigned int ec_curve_nid[DH_MAX] = {
     0
 };
 
+const unsigned int ECDSA_curve_nid[3] = {
+  0,
+  NID_X9_62_prime256v1,
+  NID_secp384r1
+};
+
+const unsigned int ECDSA_low_curve_nid[2] = {
+  0, 
+  NID_secp160r1
+};
+
 unsigned char dhgen[DH_MAX] = { 0,0,0,0x02,0x02,0,0,0,0,0,0,0x02 };
 
 const unsigned char khi_context_id[16] = {
