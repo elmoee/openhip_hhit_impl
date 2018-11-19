@@ -872,7 +872,7 @@ int build_hdrr(__u8 *hdrr, int hdrr_size, hi_node *hi, struct sockaddr *addr)
 
   /* HIP signature */
   hiph->hdr_len = (len / 8) - 1;
-  len += build_tlv_signature(hi, hdrr, len, 2);
+  len += build_tlv_signature(hi, hdrr, len, 2, hi->hit_suite_id);
   hiph->hdr_len = (len / 8) - 1;
   return(len);
 }

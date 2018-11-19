@@ -124,7 +124,7 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len, struct sockaddr *src,
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name);
 int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name);
 int build_spi_locator(__u8 *data, __u32 spi, struct sockaddr *addr);
-int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1);
+int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type);
 int build_rekey(hip_assoc *hip_a);
 
 /* hip_input.c */

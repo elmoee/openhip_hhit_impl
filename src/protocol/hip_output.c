@@ -423,7 +423,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* hip_signature_2 - receiver's HIT and checksum zeroed */
   hiph->hdr_len = (location / 8) - 1;
 
-  location += build_tlv_signature(hi, data, location, TRUE);
+  location += build_tlv_signature(hi, data, location, TRUE, hi->hit_suite_id);
   hiph->hdr_len = (location / 8) - 1;
   /* insert the cookie (OPAQUE and I) */
   memcpy(&data[cookie_location], cookie, sizeof(hipcookie));
@@ -676,7 +676,7 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* build the HIP SIG in a SIG RR */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   /* add any echo response (after signature) */
   if (hip_a->opaque && (hip_a->opaque->opaque_nosig))
@@ -782,7 +782,7 @@ int hip_send_R2(hip_assoc *hip_a)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -1133,7 +1133,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location += build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   /* Add a nonce in an echo request parameter when
    * doing address verification (after signature)
@@ -1308,7 +1308,7 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_signature(hip_mr->hi, buff, location, FALSE);
+  location += build_tlv_signature(hip_mr->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -1378,7 +1378,7 @@ int hip_send_update_locators(hip_assoc *hip_a)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location += build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   src = HIPA_SRC(hip_a);
   dst = HIPA_DST(hip_a);
@@ -1490,7 +1490,7 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -1583,7 +1583,7 @@ int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -2303,11 +2303,13 @@ int build_tlv_cert(__u8 *buff)
   return(0);
 }
 
-int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
+int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
 {
   /* HIP sig */
-  SHA256_CTX c;
-  unsigned char md[SHA256_DIGEST_LENGTH] = {0};
+  SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  SHA512_CTX sha512_ctx;
+  unsigned char md[SHA512_DIGEST_LENGTH] = {0};
   DSA_SIG *dsa_sig;
   ECDSA_SIG *ecdsa_sig;
   tlv_hip_sig *sig;
@@ -2326,9 +2328,26 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
     }
 
   /* calculate SHA1 hash of the HIP message */
-  SHA256_Init(&c);
-  SHA256_Update(&c, data, location);
-  SHA256_Final(md, &c);
+  switch (type)
+    {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, location);
+      SHA256_Final(md, &sha256_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      SHA384_Init(&sha512_ctx);
+      SHA384_Update(&sha512_ctx, data, location);
+      SHA384_Final(md, &sha512_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&sha1_ctx);
+      SHA1_Update(&sha1_ctx, data, location);
+      SHA1_Final(md, &sha1_ctx);
+      break;
+    default:
+      return(0);
+    }
 
   /* build tlv header */
   sig = (tlv_hip_sig*) &data[location];
@@ -2368,11 +2387,11 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
         }
       break;
     case HI_ALG_ECDSA: /* RFC 4754 */
-      sig_len = HIP_ECDSA256_SIG_SIZE;
+      sig_len = HIP_ECDSA384_SIG_SIZE;
       memset(sig->signature, 0, sig_len);
-      ecdsa_sig = ECDSA_do_sign(md, SHA256_DIGEST_LENGTH, hi->ecdsa);
-      bn2bin_safe(ecdsa_sig->r, &sig->signature[0], 32);
-      bn2bin_safe(ecdsa_sig->s, &sig->signature[32], 32);
+      ecdsa_sig = ECDSA_do_sign(md, SHA384_DIGEST_LENGTH, hi->ecdsa);
+      bn2bin_safe(ecdsa_sig->r, &sig->signature[0], 48);
+      bn2bin_safe(ecdsa_sig->s, &sig->signature[48], 48);
       ECDSA_SIG_free(ecdsa_sig);
       break;
     default:

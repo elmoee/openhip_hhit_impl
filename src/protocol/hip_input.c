@@ -3803,11 +3803,11 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
           log_(NORM, "no ECDSA context!\n");
           return(-1);
         }
-        if (length != 1 + HIP_ECDSA256_SIG_SIZE)
+        if (length != 1 + HIP_ECDSA384_SIG_SIZE)
         {
           log_(WARN, "Invalid ECDSA signature size of %d ",
                length);
-          log_(NORM, "(should be %d).\n", 1 + HIP_ECDSA256_SIG_SIZE);
+          log_(NORM, "(should be %d).\n", 1 + HIP_ECDSA384_SIG_SIZE);
           if (!OPT.permissive)
             {
               return(-1);
@@ -3847,9 +3847,9 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
                        sig->signature, sig_len, rsa);
       break;
     case HI_ALG_ECDSA:
-      ecdsa_sig.r = BN_bin2bn(&sig->signature[0], 32, NULL);
-      ecdsa_sig.s = BN_bin2bn(&sig->signature[32], 32, NULL);
-      err = ECDSA_do_verify(md, SHA256_DIGEST_LENGTH, &ecdsa_sig, ecdsa);
+      ecdsa_sig.r = BN_bin2bn(&sig->signature[0], 48, NULL);
+      ecdsa_sig.s = BN_bin2bn(&sig->signature[48], 48, NULL);
+      err = ECDSA_do_verify(md, SHA384_DIGEST_LENGTH, &ecdsa_sig, ecdsa);
       BN_free(ecdsa_sig.r);
       BN_free(ecdsa_sig.s);
       break;
