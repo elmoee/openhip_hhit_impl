@@ -3908,8 +3908,7 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
               hmac_md, &hmac_md_len  );
       break;
     case HIT_SUITE_4BIT_ECDSA_SHA384:
-      HMAC(   EVP_sha256(),
-        //EVP_sha384(),
+      HMAC(   EVP_sha384(),
               key, key_len,
               data, data_len,
               hmac_md, &hmac_md_len  );

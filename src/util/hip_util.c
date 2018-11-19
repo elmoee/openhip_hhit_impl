@@ -478,9 +478,9 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
         curve = ntohs(curve);
         key_len = hi_length - 2;
         // TODO: define constants 65 and 33 uncompressed and compressed
-        if (key_len != 65 && key_len != 33)
+        if (key_len != 97 && key_len != 49 && key_len != 65 && key_len != 33)
           {
-            log_(WARN, "ECDSA invalid public key length%d \n", key_len);
+            log_(WARN, "ECDSA invalid public key length %d \n", key_len);
             return(-1);
           }
         break;
@@ -2269,15 +2269,20 @@ int khi_hi_input(hi_node *hi, __u8 *out)
  *
  * out:		Returns 0 if successful, -1 on error.
  *
- * Converts the Host Identity to a Type 1 SHA-256 HIT.
+ * Converts the Host Identity to a 
+ * Type 1 SHA-256 HIT.
+ * Type 2 SHA-384 HIT
+ * Type 3 SHA-1 HIT
  *
  */
-int hi_to_hit(hi_node *hi, hip_hit hit)
+int hi_to_hit(hi_node *hi, hip_hit hit, int type)
 {
-  int len;
+  int len, hash_len;
   __u8 *data = NULL;
-  SHA256_CTX ctx;
-  unsigned char hash[SHA256_DIGEST_LENGTH];
+  SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  SHA512_CTX sha512_ctx;
+  unsigned char hash[SHA512_DIGEST_LENGTH];
   __u32 prefix;
 
   if (!hi)
@@ -2285,7 +2290,6 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
       log_(WARN, "hi_to_hit(): NULL hi\n");
       return(-1);
     }
-
 
   /* calculate lengths and validate HIs */
   switch (hi->algorithm_id)
@@ -2350,15 +2354,36 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
   memcpy(&data[0], khi_context_id, sizeof(khi_context_id));
   khi_hi_input(hi, &data[sizeof(khi_context_id)]);
   /* Compute the hash */
-  SHA256_Init(&ctx);
-  SHA256_Update(&ctx, data, len);
-  SHA256_Final(hash, &ctx);
+  switch (type)
+    {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, len);
+      SHA256_Final(hash, &sha256_ctx);
+      hash_len = SHA256_DIGEST_LENGTH;
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      SHA384_Init(&sha512_ctx);
+      SHA384_Update(&sha512_ctx, data, len);
+      SHA384_Final(hash, &sha512_ctx);
+      hash_len = SHA384_DIGEST_LENGTH;
+      break;
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&sha1_ctx);
+      SHA1_Update(&sha1_ctx, data, len);
+      SHA1_Final(hash, &sha1_ctx);
+      hash_len = SHA_DIGEST_LENGTH;
+      break;
+    default:
+      return(-1);
+    }
+
 
   /* KHI = Prefix | OGA ID | Encode_n( Hash)
    */
   prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
-  khi_encode_n(hash, SHA256_DIGEST_LENGTH, &hit[4], 96 );
+  khi_encode_n(hash, hash_len, &hit[4], 96 );
   /* lower 96 bits of HIT */
   hit[3] |= (0x0F & hi->hit_suite_id); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
   free(data);
@@ -2382,7 +2407,7 @@ int validate_hit(hip_hit hit, hi_node *hi)
       return(FALSE);
     }
 
-  if (hi_to_hit(hi, computed_hit) < 0)
+  if (hi_to_hit(hi, computed_hit, hi->hit_suite_id) < 0)
     {
       return(FALSE);
     }

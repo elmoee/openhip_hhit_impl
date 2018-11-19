@@ -221,7 +221,7 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
                  hip_hit *hit_i, hip_hit *hit_r);
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit *hit_i, hip_hit *hit_r, __u64 solution);
-int hi_to_hit(hi_node *hi, hip_hit hit);
+int hi_to_hit(hi_node *hi, hip_hit hit, int type);
 int validate_hit(hip_hit hit, hi_node *hi);
 void print_hex(const void *data, int len);
 void print_binary(void *data, int len);

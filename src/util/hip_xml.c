@@ -310,8 +310,14 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
           case HI_ALG_ECDSA:
             if (strcmp((char *)node->name, "CURVE") == 0)
               {
-                int curve;
-                sscanf(data, "%d", &curve);
+                unsigned int curve;
+                sscanf(data, "%u", &curve);
+                if(curve > ECDSA_MAX)
+                  {
+                    log_(WARN, "Curve id %u invalid", curve);
+                    continue;
+                  }
+                curve = ECDSA_curve_nid[curve];
                 EC_KEY_set_group(hi->ecdsa, EC_GROUP_new_by_curve_name(curve));
               }
             if (strcmp((char *)node->name, "PUB") == 0)

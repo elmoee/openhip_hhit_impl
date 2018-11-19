@@ -190,7 +190,7 @@ const unsigned int ec_curve_nid[DH_MAX] = {
     0
 };
 
-const unsigned int ECDSA_curve_nid[3] = {
+const unsigned int ECDSA_curve_nid[ECDSA_MAX] = {
   0,
   NID_X9_62_prime256v1,
   NID_secp384r1

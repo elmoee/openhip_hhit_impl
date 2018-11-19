@@ -289,6 +289,15 @@ typedef enum {
   DH_MODP_2048,
   DH_MAX
 } DH_GROUP_IDS;
+
+/* ECDSA curve IDs*/
+typedef enum {
+  ECDSA_RESERVED,
+  ECDSA_256,
+  ECDSA_384,
+  ECDSA_MAX
+} ECDSA_CURVE_IDS;
+
 /* choose default DH group here */
 #define DEFAULT_DH_GROUP_ID  DH_MODP_1536
 

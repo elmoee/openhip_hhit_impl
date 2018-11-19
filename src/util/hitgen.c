@@ -273,7 +273,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 
   hit.ss_family = AF_INET6;
   hitp = SA2IP(&hit);
-  if (hi_to_hit(&hostid, hitp) < 0)
+  if (hi_to_hit(&hostid, hitp, hostid.hit_suite_id) < 0)
     {
       printf("Error generating HIT!\n");
       exit(1);
