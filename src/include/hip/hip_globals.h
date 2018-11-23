@@ -58,6 +58,7 @@ extern dh_cache_entry *dh_cache;
 
 /* ECDSA constants */
 extern const unsigned int ECDSA_curve_nid[ECDSA_MAX];
+extern const unsigned int ECDSA_curve_PARAM_SIZE[ECDSA_MAX];
 extern const unsigned int ECDSA_low_curve_nid[2];
 
 /* Diffie-Hellman constants */

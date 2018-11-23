@@ -3412,6 +3412,21 @@ void logbn(BIGNUM *bn)
   BIO_free(bp);
 }
 
+
+/*
+ * Return the id for the ECDSA-type,
+ * return -1 if not found.
+ */
+int ECDSA_get_curve_id(const EC_KEY * ecdsa){
+  int curve_name = EC_GROUP_get_curve_name(
+                    EC_KEY_get0_group(ecdsa)
+                   );
+  for (int i = 0; i < ECDSA_MAX; ++i){
+    if (ECDSA_curve_nid[i] == curve_name) return i;
+  }
+  return -1;
+}
+
 /*
  * function bn2bin_safe(BIGNUM *dest)
  *

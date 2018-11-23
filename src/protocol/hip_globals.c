@@ -196,6 +196,12 @@ const unsigned int ECDSA_curve_nid[ECDSA_MAX] = {
   NID_secp384r1
 };
 
+const unsigned int ECDSA_curve_PARAM_SIZE[ECDSA_MAX] = {
+  0,
+  HIP_ECDSA256_SIG_PARAM_SIZE,
+  HIP_ECDSA384_SIG_PARAM_SIZE
+};
+
 const unsigned int ECDSA_low_curve_nid[2] = {
   0, 
   NID_secp160r1

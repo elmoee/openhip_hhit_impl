@@ -232,6 +232,7 @@ int compare_hits2(void const *s1, void const *s2);
 int maxof(int num_args, ...);
 int hip_header_offset(const __u8 *data);
 int udp_header_offset(const __u8 *data);
+int ECDSA_get_curve_id(const EC_KEY * ecdsa);
 __u16 checksum_udp_packet(__u8 *data,
                           struct sockaddr *src,
                           struct sockaddr *dst);
