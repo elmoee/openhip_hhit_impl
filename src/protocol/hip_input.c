@@ -666,7 +666,8 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
-                                 hip_a->peer_hi->ecdsa) < 0)
+                                 hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -1507,7 +1508,8 @@ I2_ERROR:
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
-                                 hip_a->peer_hi->ecdsa) < 0)
+                                 hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -1898,7 +1900,8 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
-                                 hip_a->peer_hi->ecdsa) < 0)
+                                 hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -2147,7 +2150,8 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
-                                 hip_a->peer_hi->ecdsa) < 0)
+                                 hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -3277,7 +3281,8 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
-                                 hip_a->peer_hi->ecdsa) < 0)
+                                 hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               hip_send_notify(hip_a,
@@ -3499,7 +3504,8 @@ int hip_parse_notify(__u8 *data,
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
-                                 hip_a->peer_hi->ecdsa) < 0)
+                                 hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
               /* Don't send NOTIFY responding to a NOTIFY
@@ -3707,7 +3713,7 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src)
   hiph->checksum = 0;
   hiph->hdr_len = (len / 8) - 1;
   if (validate_signature( data, location, tlv, peer_hi->dsa,
-                          peer_hi->rsa, peer_hi->ecdsa) < 0)
+                          peer_hi->rsa, peer_hi->ecdsa, peer_hi->hit_suite_id) < 0)
     {
       log_(WARN, "Invalid signature in BOS.\n");
       err = -1;
@@ -3742,11 +3748,13 @@ int hip_handle_CER(__u8 *data, hip_assoc *hip_a)
  * out:		Returns 0 if signature is correct, -1 if incorrect or error.
  */
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
-                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa)
+                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa, int type)
 {
   int err;
-  SHA256_CTX c;
-  unsigned char md[SHA256_DIGEST_LENGTH];
+  SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  SHA512_CTX sha512_ctx;
+  unsigned char md[SHA512_DIGEST_LENGTH];
   DSA_SIG dsa_sig;
   ECDSA_SIG ecdsa_sig;
   int length, sig_len;
@@ -3755,7 +3763,7 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 
   length = ntohs(sig->length);
   alg = sig->algorithm;
-  log_(WARN, "Validating signature..\n");
+  log_(WARN, "Validating signature of type %d \n", type);
   switch (alg)
     {
     case HI_ALG_DSA:
@@ -3819,11 +3827,30 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
       return(-1);
     }
   sig_len = length - 1;
-
   /* calculate SHA1 hash of the HIP message */
-  SHA256_Init(&c);
-  SHA256_Update(&c, data, data_len);
-  SHA256_Final(md, &c);
+  switch (type)
+    {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, data_len);
+      SHA256_Final(md, &sha256_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      SHA384_Init(&sha512_ctx);
+      SHA384_Update(&sha512_ctx, data, data_len);
+      SHA384_Final(md, &sha512_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&sha1_ctx);
+      SHA1_Update(&sha1_ctx, data, data_len);
+      SHA1_Final(md, &sha1_ctx);
+      break;
+    default:
+      // Default to SHA256 for backwards compatibility
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, data_len);
+      SHA256_Final(md, &sha256_ctx);
+    }
 
   /* for debugging, print out md or signature */
   log_(NORM, "SHA1: ");
