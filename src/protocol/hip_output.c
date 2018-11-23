@@ -2074,7 +2074,7 @@ int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
           log_(WARN, "No ECDSA context when building length!\n");
           return(0);
         }
-        hi_len = sizeof(tlv_host_id) + 2 + 65; // TODO: 33 if compressed
+        hi_len = sizeof(tlv_host_id) + 2 + HIP_ECDSA384_SIG_SIZE; // TODO: 33 if compressed
       break;
 
     default:
@@ -2346,7 +2346,10 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
       SHA1_Final(md, &sha1_ctx);
       break;
     default:
-      return(0);
+      // Default to SHA256 for backwards compatibility
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, location);
+      SHA256_Final(md, &sha256_ctx);
     }
 
   /* build tlv header */
@@ -2460,7 +2463,7 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
   hmac->type = htons((__u16)type);
   hmac->length = htons(sizeof(tlv_hmac) - 4);
   log_(NORM, "HMAC length=%d\n", sizeof(tlv_hmac));
-
+  log_(WARN, "HMAC_md_len=%d, hmacsize=%d \n", hmac_md_len, sizeof(hmac->hmac));
   /* get lower 160-bits of HMAC computation */
   memcpy( hmac->hmac,
           &hmac_md[hmac_md_len - sizeof(hmac->hmac)],
