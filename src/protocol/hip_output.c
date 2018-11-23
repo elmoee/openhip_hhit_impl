@@ -2393,7 +2393,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
         ecdsa_sig = ECDSA_do_sign(md, SHA384_DIGEST_LENGTH, hi->ecdsa);
         int curve_name = ECDSA_get_curve_id(hi->ecdsa);
         if (curve_name == -1) {
-          log_(WARN, "Cerve not implemented.\n");
+          log_(WARN, "Curve not implemented.\n");
           return -1;
         }
         int sig_len = ECDSA_curve_PARAM_SIZE[curve_name];

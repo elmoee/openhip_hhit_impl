@@ -3850,7 +3850,7 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
       {
         int curve_name = ECDSA_get_curve_id(ecdsa);
         if (curve_name == -1) {
-          log_(WARN, "Cerve not implemented.\n");
+          log_(WARN, "Curve not implemented.\n");
           return -1;
         }
         int sig_len = ECDSA_curve_PARAM_SIZE[curve_name];
