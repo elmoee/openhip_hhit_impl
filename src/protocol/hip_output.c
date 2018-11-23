@@ -2391,18 +2391,20 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
       break;
     case HI_ALG_ECDSA: /* RFC 4754 */
       {
-        sig_len = HIP_ECDSA384_SIG_SIZE;
-        memset(sig->signature, 0, sig_len);
-        ecdsa_sig = ECDSA_do_sign(md, SHA384_DIGEST_LENGTH, hi->ecdsa);
         int curve_name = ECDSA_get_curve_id(hi->ecdsa);
         if (curve_name == -1) {
           log_(WARN, "Curve not implemented.\n");
           return -1;
         }
-        int sig_len = ECDSA_curve_PARAM_SIZE[curve_name];
-        bn2bin_safe(ecdsa_sig->r, &sig->signature[0], sig_len);
-        bn2bin_safe(ecdsa_sig->s, &sig->signature[sig_len], sig_len);
+        int curve_param_size = ECDSA_curve_PARAM_SIZE[curve_name];
+        memset(sig->signature, 0, curve_param_size*2);
+        ecdsa_sig = ECDSA_do_sign(md, curve_param_size, hi->ecdsa);
+
+        bn2bin_safe(ecdsa_sig->r, &sig->signature[0], curve_param_size);
+        bn2bin_safe(ecdsa_sig->s, &sig->signature[curve_param_size], curve_param_size);
+
         ECDSA_SIG_free(ecdsa_sig);
+        sig_len = 2 * curve_param_size + 1; 
       }
       break;
     default:

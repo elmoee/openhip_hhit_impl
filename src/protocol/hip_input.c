@@ -3880,10 +3880,11 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
           log_(WARN, "Curve not implemented.\n");
           return -1;
         }
-        int sig_len = ECDSA_curve_PARAM_SIZE[curve_name];
-        ecdsa_sig.r = BN_bin2bn(&sig->signature[0], sig_len, NULL);
-        ecdsa_sig.s = BN_bin2bn(&sig->signature[sig_len], sig_len, NULL);
-        err = ECDSA_do_verify(md, SHA384_DIGEST_LENGTH, &ecdsa_sig, ecdsa);
+        int curve_param_size = ECDSA_curve_PARAM_SIZE[curve_name];
+        ecdsa_sig.r = BN_bin2bn(&sig->signature[0], curve_param_size, NULL);
+        ecdsa_sig.s = BN_bin2bn(&sig->signature[curve_param_size], curve_param_size, NULL);
+
+        err = ECDSA_do_verify(md, curve_param_size, &ecdsa_sig, ecdsa);
         BN_free(ecdsa_sig.r);
         BN_free(ecdsa_sig.s);
       }
