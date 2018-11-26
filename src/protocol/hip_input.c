@@ -3811,11 +3811,11 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
           log_(NORM, "no ECDSA context!\n");
           return(-1);
         }
-        if (length != 1 + HIP_ECDSA384_SIG_SIZE)
+        if (length !=  HIP_ECDSA384_SIG_SIZE)
         {
           log_(WARN, "Invalid ECDSA signature size of %d ",
                length);
-          log_(NORM, "(should be %d).\n", 1 + HIP_ECDSA384_SIG_SIZE);
+          log_(NORM, "(should be %d).\n", HIP_ECDSA384_SIG_SIZE);
           if (!OPT.permissive)
             {
               return(-1);

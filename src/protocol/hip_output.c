@@ -2404,7 +2404,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
         bn2bin_safe(ecdsa_sig->s, &sig->signature[curve_param_size], curve_param_size);
 
         ECDSA_SIG_free(ecdsa_sig);
-        sig_len = 2 * curve_param_size + 1; 
+        sig_len = 2 * curve_param_size; 
       }
       break;
     default:
