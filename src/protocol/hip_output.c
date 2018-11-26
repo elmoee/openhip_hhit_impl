@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -318,6 +318,14 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
   return(err);
 }
 
+void print_I(unsigned char* i_string, int i_size) {
+  log_(NORM, "I = 0x");
+  for(size_t i = 0; i < i_size; i++) {
+    log_(NORM, "%02x", *(i_string + i));
+  }
+  log_(NORM, "\n");
+}
+
 /*
  *
  * function hip_generate_R1()
@@ -329,7 +337,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
  *
  */
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
-                    dh_cache_entry *dh_entry)
+                    dh_cache_entry *dh_entry, int rhash_len)
 {
   hiphdr *hiph;
   int location = 0, cookie_location = 0;
@@ -374,9 +382,18 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* build the PUZZLE TLV */
   puzzle = (tlv_puzzle*) &data[location];
   puzzle->type = htons(PARAM_PUZZLE);
-  puzzle->length = htons(sizeof(tlv_puzzle) - 4);
-  location += sizeof(tlv_puzzle);
-  len = sizeof(hipcookie);
+  /* rhash_len is already in bytes size so it should not be divided by 8 */
+  puzzle->length = htons(rhash_len + 4);
+
+  size_t i_pointer_size = sizeof(unsigned char*);
+
+  /* Calculate real lenght of the cookie including the I variable */
+  len = sizeof(hipcookie) - i_pointer_size + rhash_len;
+
+  /* Calculate the real increase in location */
+  size_t puzzle_size = sizeof(tlv_puzzle) - i_pointer_size + rhash_len;
+  location += puzzle_size;
+
   memset(&puzzle->cookie, 0, len);       /* zero OPAQUE and I fields for SIG */
   puzzle->cookie.k = cookie->k;
   puzzle->cookie.lifetime = cookie->lifetime;
@@ -425,9 +442,12 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   location += build_tlv_signature(hi, data, location, TRUE);
   hiph->hdr_len = (location / 8) - 1;
-  /* insert the cookie (OPAQUE and I) */
-  memcpy(&data[cookie_location], cookie, sizeof(hipcookie));
-
+  /* insert the cookie OPAQUE parameter */
+  memcpy(&data[cookie_location], cookie, sizeof(hipcookie)-i_pointer_size);
+  /* insert the cookie I parameter */
+  cookie_location += sizeof(hipcookie)-i_pointer_size;
+  memcpy(&data[cookie_location], cookie->i, rhash_len);
+  print_I(cookie->i, rhash_len);
   /* if ECHO_REQUEST_NOSIG is needed, put it here */
 
   return(location);
@@ -541,9 +561,13 @@ int hip_send_I2(hip_assoc *hip_a)
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
   sol->length = htons(20); //TODO: change to new standard ISSUE Puzzle/Solution length(R1, I2)
+  //log_(WARN, "cookie lenght = %d\n", sizeof(cookie.i)); //Should be RHASH_len bits
+  //log_(WARN, "hip suite at I = %d\n", hip_a->hit_suite);
+  int j_size = auth_key_len_hit_suite(hip_a->hit_suite);
+  //log_(WARN, "j size = %d\n", j_size);
   memcpy(&sol->cookie, &cookie, sizeof(hipcookie));
   if ((err = solve_puzzle(&cookie, &solution,
-                          &hip_a->hi->hit, &hip_a->peer_hi->hit)) < 0)
+                          &hip_a->hi->hit, &hip_a->peer_hi->hit, j_size)) < 0)
     {
       return(err);
     }
@@ -1288,7 +1312,7 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
               (__u8 *)&ticket->hmac_key_index, length_to_hmac,
               hmac_md, &hmac_md_len  );
       break;
-    
+
     default:
       return(0);
       break;
@@ -2680,4 +2704,3 @@ int build_rekey(hip_assoc *hip_a)
 
   return(0);
 }
-

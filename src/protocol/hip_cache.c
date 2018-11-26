@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -138,7 +138,8 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
   for (i = 0; i < R1_CACHE_SIZE; i++)
     {
       entry = &hi->r1_cache[dh_group][i];
-      entry->current_puzzle = generate_cookie();
+      int i_size = auth_key_len_hit_suite((int)hi->hit_suite_id);
+      entry->current_puzzle = generate_cookie(i_size);
       entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
       // TODO: move len, only do once
@@ -151,7 +152,8 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
       memset(entry->packet, 0, len);
       entry->len = hip_generate_R1(entry->packet, hi,
                                    entry->current_puzzle,
-                                   entry->dh_entry);
+                                   entry->dh_entry,
+                                   i_size);
       entry->previous_puzzle = NULL;
       gettimeofday(&entry->creation_time, NULL);
     }
@@ -167,14 +169,15 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
  *
  * Generates a new random cookie puzzle.
  */
-hipcookie *generate_cookie()
+hipcookie *generate_cookie(int i_size)
 {
   hipcookie *cookie;
   cookie = (hipcookie*) malloc(sizeof(hipcookie));
   memset(cookie, 0, sizeof(hipcookie));
 
+  cookie->i = (unsigned char*) malloc(i_size);
   /* generate random 64-bit I */
-  RAND_bytes((unsigned char*)&cookie->i, 8);
+  RAND_bytes(cookie->i, i_size);
   /* K and lifetime are set from configuration */
   cookie->k = (__u8)HCNF.cookie_difficulty;
   cookie->lifetime = (__u8)HCNF.cookie_lifetime;
@@ -220,7 +223,8 @@ void replace_next_R1(__u8 dh_group)
         }
       entry->previous_puzzle = entry->current_puzzle;
       /* generate a new R1 entry */
-      entry->current_puzzle = generate_cookie();
+      int i_size = auth_key_len_hit_suite((int)h->hit_suite_id);
+      entry->current_puzzle = generate_cookie(i_size);
       entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
       free(entry->packet);
@@ -235,7 +239,8 @@ void replace_next_R1(__u8 dh_group)
       entry->len = hip_generate_R1(entry->packet,
                                    h,
                                    entry->current_puzzle,
-                                   entry->dh_entry);
+                                   entry->dh_entry,
+                                   i_size);
       gettimeofday(&entry->creation_time, NULL);
 
       /* index is about to roll over, so all R1s have been replaced
@@ -564,4 +569,3 @@ void expire_old_dh_entries(__u8 dh_group)
     }
 
 }
-

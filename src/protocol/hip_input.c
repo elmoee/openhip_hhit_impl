@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -355,9 +355,9 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
             }
         }
         else if (type == PARAM_DH_GROUP_LIST){
-          
+
                 tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
-          
+
                 if ((handle_dh_groups(&dhGroupList->group_id, length, true)) < 0)
                 {
                   hip_send_notify(
@@ -367,7 +367,7 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
                       0);
                   return(-1);
                 }
-          
+
               }
       else
         {
@@ -584,7 +584,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
   tlv_puzzle *tlv_pz = NULL;
   dh_cache_entry *dh_entry;
   hi_node saved_peer_hi;
-  hipcookie cookie_tmp = { 0, 0, 0, 0 };
+  hipcookie cookie_tmp;
   __u64 gen;
   __u8 valid_cert = FALSE;
   tlv_via_rvs *via;
@@ -1074,7 +1074,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   __u8 valid_cert = FALSE;
 
   hip_a_existing = *hip_ar;
-  
+
   /* Find hip header */
   location = 0;
   hiph = (hiphdr*) &data[location];
@@ -3104,7 +3104,7 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
         EVP_PKEY_derive(ctx, NULL, &hip_a -> dh_secret_len);
         dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
         EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
-    
+
         set_secret_key(dh_secret_key, hip_a);
         keymat_index = 0;
         compute_keymat(hip_a);
@@ -5254,18 +5254,18 @@ int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
     __u8 *dh_group_list;
     __u8 dh_group_id;
     __u16 available_group_id;
-  
-  
+
+
     if(is_responder){
       dh_group_list = HCNF.dh_group_list;
       available_group_id = conf_dh_group_ids_to_mask(dh_group_ids,length);
       length = DH_MAX-1;
     } else{
-  
+
       dh_group_list =  dh_group_ids;
       available_group_id = conf_dh_group_ids_to_mask(HCNF.dh_group_list, DH_MAX-1);
     }
-  
+
     HCNF.dh_group = 0;
     if (length >= DH_MAX)
     {
@@ -5274,7 +5274,7 @@ int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
            length, DH_MAX - 1);
       /* continue to read the group ids... */
     }
-  
+
     for (int i = 0; (i < length); dh_group_list++,
         i++)
     {

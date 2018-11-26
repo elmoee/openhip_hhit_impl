@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -1927,9 +1927,10 @@ int hex_to_bin(char *src, char *dst, int dst_len)
  *
  * Solve the cookie puzzle in max_tries and store the solution, otherwise
  * return error.
+ * TODO: puzzle fix. Fix so not only using SHA256 and to use different sizes of i
  */
 int solve_puzzle(hipcookie *cookie, __u64 *solution,
-                 hip_hit *hit_i, hip_hit *hit_r)
+                 hip_hit *hit_i, hip_hit *hit_r, int j_size)
 {
   /* For birthday cookie */
   unsigned int i = 0, lifetime_sec;
@@ -2017,6 +2018,7 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
  *              solution = J, the puzzle solution given in I2
  *
  *  out:	Returns 0 if cookie is valid, -1 if invalid or error.
+ * TODO: puzzle fix. Fix so more than only SHA256 can be used
  */
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit* hit_i, hip_hit* hit_r, __u64 solution)
@@ -3766,4 +3768,3 @@ void hex_print(register const char *indent,
     }
   (void)printf("\n");
 }
-
