@@ -589,6 +589,9 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
   __u8 valid_cert = FALSE;
   tlv_via_rvs *via;
   struct sockaddr_storage rvs_addr;
+  size_t i_pointer_size = sizeof(unsigned char*);
+  int hit_suite_id = (int)hip_a->peer_hi->hit_suite_id;
+  int rhash_len = auth_key_len_hit_suite(hit_suite_id);
 
   location = 0;
   hiph = (hiphdr*) &data[location];
@@ -616,8 +619,14 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         {
           /* save the cookie, then zero fields for signature */
           tlv_pz = (tlv_puzzle*) tlv;
-          memcpy(&cookie_tmp, &tlv_pz->cookie, sizeof(hipcookie));
-          memset(&tlv_pz->cookie, 0, sizeof(hipcookie));
+          /* Calculate real lenght of the cookie including the I variable */
+          size_t hipcookie_len = sizeof(hipcookie) - i_pointer_size + rhash_len;
+          cookie_tmp.i = (unsigned char*) malloc(rhash_len);
+
+          memcpy(&cookie_tmp, &tlv_pz->cookie, sizeof(hipcookie) - i_pointer_size);
+          memcpy(cookie_tmp.i, (unsigned char*)&tlv_pz->cookie+sizeof(hipcookie)-i_pointer_size, rhash_len);
+
+          memset(&tlv_pz->cookie, 0, hipcookie_len);
           tlv_pz->cookie.k = cookie_tmp.k;
           tlv_pz->cookie.lifetime = cookie_tmp.lifetime;
         }
@@ -4840,10 +4849,10 @@ int check_tlv_length(int type, int length)
   switch (type)
     {
     case PARAM_R1_COUNTER:
-    case PARAM_PUZZLE:
+    //case PARAM_PUZZLE:
       return(length == 12);
-    case PARAM_SOLUTION:
-      return(length == 20);
+    //case PARAM_SOLUTION:
+      //return(length == 20);
     case PARAM_HMAC:
     case PARAM_HMAC_2:
       return(length == 64);

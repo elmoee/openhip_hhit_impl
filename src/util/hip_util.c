@@ -1781,11 +1781,20 @@ void cb(int p, int n, void *arg)
     }
 }
 
+void print_I(unsigned char* i_string, int i_size) {
+  log_(NORM, "I=0x");
+  for(size_t i = 0; i < i_size; i++) {
+    log_(NORM, "%02x", *(i_string + i));
+  }
+  log_(NORM, ")\n");
+}
+
 void print_cookie(hipcookie *cookie)
 {
   __u32 s =  1 << (cookie->lifetime - 32);
-  log_(NORM, "(k=%u lifetime=%d (%u seconds) opaque=%d I=0x%llx)\n",
-       cookie->k, cookie->lifetime, s, cookie->opaque, cookie->i);
+  log_(NORM, "(k=%u lifetime=%d (%u seconds) opaque=%d ",
+       cookie->k, cookie->lifetime, s, cookie->opaque);
+  print_I(cookie->i, 32); // TODO: use variable size
 }
 
 /*

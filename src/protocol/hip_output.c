@@ -318,14 +318,6 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
   return(err);
 }
 
-void print_I(unsigned char* i_string, int i_size) {
-  log_(NORM, "I = 0x");
-  for(size_t i = 0; i < i_size; i++) {
-    log_(NORM, "%02x", *(i_string + i));
-  }
-  log_(NORM, "\n");
-}
-
 /*
  *
  * function hip_generate_R1()
@@ -394,7 +386,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   size_t puzzle_size = sizeof(tlv_puzzle) - i_pointer_size + rhash_len;
   location += puzzle_size;
 
-  memset(&puzzle->cookie, 0, len);       /* zero OPAQUE and I fields for SIG */
+  memset(&puzzle->cookie, 0, sizeof(hipcookie));       /* zero OPAQUE and I fields for SIG */
   puzzle->cookie.k = cookie->k;
   puzzle->cookie.lifetime = cookie->lifetime;
   cookie_location = location - len;
@@ -447,7 +439,6 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* insert the cookie I parameter */
   cookie_location += sizeof(hipcookie)-i_pointer_size;
   memcpy(&data[cookie_location], cookie->i, rhash_len);
-  print_I(cookie->i, rhash_len);
   /* if ECHO_REQUEST_NOSIG is needed, put it here */
 
   return(location);
