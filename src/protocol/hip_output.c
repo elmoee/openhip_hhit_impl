@@ -2445,7 +2445,13 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
 
   switch (hip_a->hit_suite)
     {
-    // case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:  Not implemented
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      HMAC (  EVP_sha1(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len_hit_suite(hip_a->hit_suite),
+              data, location,
+              hmac_md, &hmac_md_len  );
+      break;
     case HIT_SUITE_4BIT_ECDSA_SHA384:
       HMAC(   EVP_sha384(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
@@ -2453,6 +2459,7 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
               data, location,
               hmac_md, &hmac_md_len  );
       break;
+    case HIT_SUITE_4BIT_RESERVED:
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
