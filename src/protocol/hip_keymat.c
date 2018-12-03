@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -143,12 +143,35 @@ void compute_keys(hip_assoc *hip_a)
 }
 
 void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
+  //SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  /** TODO: Fix so that the code uses this instead
+  switch (hip_a->hip_cipher)
+    {
+      case ESP_AES128_CBC_HMAC_SHA1:                 //AES-CBC enc
+        SHA1_Init(&sha1_ctx);
+        SHA1_Update(&sha1_ctx, hashdata, location);
+        SHA1_Final(hash, &sha1_ctx);
+        break;
+      case ESP_AES128_CBC_HMAC_SHA256:
+      case ESP_AES256_CBC_HMAC_SHA256:
+      case ESP_NULL_HMAC_SHA256:                    // NULL enc
+        SHA256_Init(&sha256_ctx);
+        SHA256_Update(&sha256_ctx, hashdata, location);
+        SHA256_Final(hash, &sha256_ctx);
+        break;
+      default:
+        // Default to SHA256 for backwards compatibility
+        SHA256_Init(&sha256_ctx);
+        SHA256_Update(&sha256_ctx, hashdata, location);
+        SHA256_Final(hash, &sha256_ctx);
+        break;
+    }
+    **/
+    SHA256_Init(&sha256_ctx);
+    SHA256_Update(&sha256_ctx, hashdata, location);
+    SHA256_Final(hash, &sha256_ctx);
 
-  SHA256_CTX c_256;
-
-  SHA256_Init(&c_256);
-  SHA256_Update(&c_256, hashdata, location);
-  SHA256_Final(hash, &c_256);
 }
 
 /*
@@ -160,7 +183,7 @@ int compute_keymat(hip_assoc *hip_a)
   int i, result;
   int location, len, dh_secret_len, hashdata_len;
   char *hashdata;
-  int sha_key_len = auth_key_len_hit_suite(hip_a->hit_suite);
+  int sha_key_len = 32; // TODO: Should be decided by ESP suite instead of hard-coded SHA-256
   unsigned char hash[sha_key_len], last_byte = 1;
   BIGNUM *hit1, *hit2;
   hip_hit *hitp;
@@ -485,4 +508,3 @@ int transform_to_aalg(int transform)
       return(0);
     }
 }
-
