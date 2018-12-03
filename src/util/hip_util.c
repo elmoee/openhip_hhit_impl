@@ -1781,20 +1781,14 @@ void cb(int p, int n, void *arg)
     }
 }
 
-void print_I(unsigned char* i_string, int i_size) {
-  log_(NORM, "I=0x");
-  for(size_t i = 0; i < i_size; i++) {
-    log_(NORM, "%02x", *(i_string + i));
-  }
-  log_(NORM, ")\n");
-}
-
-void print_cookie(hipcookie *cookie)
+void print_cookie(hipcookie *cookie, size_t i_len)
 {
   __u32 s =  1 << (cookie->lifetime - 32);
-  log_(NORM, "(k=%u lifetime=%d (%u seconds) opaque=%d ",
+  log_(NORM, "(k=%u lifetime=%d (%u seconds) opaque=%d\n",
        cookie->k, cookie->lifetime, s, cookie->opaque);
-  print_I(cookie->i, 32); // TODO: use variable size
+  log_(NORM, "I=0x");
+  print_hex(cookie->i, i_len);
+  log_(NORM, ")\n");
 }
 
 /*
@@ -1938,27 +1932,33 @@ int hex_to_bin(char *src, char *dst, int dst_len)
  * return error.
  * TODO: puzzle fix. Fix so not only using SHA256 and to use different sizes of i
  */
-int solve_puzzle(hipcookie *cookie, __u64 *solution,
-                 hip_hit *hit_i, hip_hit *hit_r, int j_size)
+int solve_puzzle(hipcookie *cookie, unsigned char *solution,
+                 hip_hit *hit_i, hip_hit *hit_r, int rhash_len)
 {
   /* For birthday cookie */
   unsigned int i = 0, lifetime_sec;
   int done = 0;
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
-  unsigned char ij[48] = {0};
-  unsigned char ij_part1[40] = {0};
-  unsigned char md[SHA256_DIGEST_LENGTH] = {0};
+  size_t ij_size = 2*rhash_len + 2*sizeof(hip_hit);
+  unsigned char* ij = (unsigned char*)malloc(ij_size);
+  size_t ij_part1_size = rhash_len + 2*sizeof(hip_hit);
+  unsigned char* ij_part1 = (unsigned char*)malloc(ij_part1_size);
+  unsigned char* md = (unsigned char*)malloc(rhash_len);
   SHA256_CTX c;
   int k;
   struct timeval time1, time2;
 
   /* create the first part of the hash material that doesn't change */
-  memcpy(&ij_part1[0], &(cookie->i), 8);
-  memcpy(&ij_part1[8], hit_i, sizeof(hip_hit));
-  memcpy(&ij_part1[24], hit_r, sizeof(hip_hit));
+  int ij_index = 0;
+  memcpy(ij_part1, cookie->i, rhash_len);
+  ij_index += rhash_len;
+  memcpy(ij_part1+ij_index, hit_i, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
+  memcpy(ij_part1+ij_index, hit_r, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
 
   log_(NORM, "Using cookie from R1: ");
-  print_cookie(cookie);
+  print_cookie(cookie, rhash_len);
   log_(NORM, "Calculating Ltrunc(SHA256(I|Rand),K)...");
 
   k = cookie->k;
@@ -1985,19 +1985,18 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
               return(-ERANGE);
             }
         }
-      memcpy(ij, ij_part1, 40);
-      RAND_bytes(&ij[40], 8);
+      memcpy(ij, ij_part1, ij_part1_size);
+      RAND_bytes(ij+ij_index, rhash_len);
       SHA256_Init(&c);
-      SHA256_Update(&c, ij, 48);
+      SHA256_Update(&c, ij, ij_size);
       SHA256_Final(md, &c);
-
       if (!OPT.daemon && (D_VERBOSE == OPT.debug) &&
           ((i % 10000) == 0))
         {
           printf(".");
           fflush(stdout);
         }
-      if (compare_bits((char*)md, SHA256_DIGEST_LENGTH, zero, 8,
+      if (compare_bits((char*)md, rhash_len, zero, 8,
                        k) == 0)
         {
           gettimeofday(&time2, NULL);
@@ -2007,11 +2006,11 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
         }
     }
 
-  memcpy(solution, &ij[40], 8);
+  memcpy(solution, ij+ij_index, rhash_len);
   log_(NORM, "MD=");
-  print_hex(md, sizeof(md));
+  print_hex(md, rhash_len);
   log_(NORM, "\nIJ=");
-  print_hex(ij, sizeof(ij));
+  print_hex(ij, ij_size);
   log_(NORM, "\n");
 
   return(0);
@@ -2030,7 +2029,7 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
  * TODO: puzzle fix. Fix so more than only SHA256 can be used
  */
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
-                      hip_hit* hit_i, hip_hit* hit_r, __u64 solution)
+                      hip_hit* hit_i, hip_hit* hit_r, unsigned char *solution)
 {
   unsigned char md[SHA256_DIGEST_LENGTH];
   unsigned char ij[48];

@@ -393,7 +393,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   if (D_VERBOSE == OPT.debug_R1)
     {
       log_(NORM, "Cookie sent in R1: ");
-      print_cookie(cookie);
+      print_cookie(cookie, rhash_len);
     }
   location = eight_byte_align(location);
 
@@ -462,7 +462,8 @@ int hip_send_I2(hip_assoc *hip_a)
   hiphdr *hiph;
   __u8 buff[sizeof(hiphdr)            + sizeof(tlv_esp_info) +
             sizeof(tlv_r1_counter)    +
-            sizeof(tlv_solution)      + sizeof(tlv_diffie_hellman) +
+            sizeof(tlv_solution)      - 2*sizeof(unsigned char*) +
+            2*48 /*max rhash len */   + sizeof(tlv_diffie_hellman) +
             DH_MAX_LEN                + sizeof(tlv_hip_cipher) + 2 +
             sizeof(tlv_esp_transform) + sizeof(tlv_encrypted) +
             sizeof(tlv_host_id)       + 1 + DSA_PRIV +
@@ -485,7 +486,7 @@ int hip_send_I2(hip_assoc *hip_a)
    */
   unsigned char cbc_iv[16] = {0};
 
-  __u64 solution = 0;
+  unsigned char *solution;
 
   tlv_r1_counter *r1cnt;
   tlv_esp_info *esp_info;
@@ -551,25 +552,31 @@ int hip_send_I2(hip_assoc *hip_a)
   /* puzzle solution */
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
-  sol->length = htons(20); //TODO: change to new standard ISSUE Puzzle/Solution length(R1, I2)
-  //log_(WARN, "cookie lenght = %d\n", sizeof(cookie.i)); //Should be RHASH_len bits
-  //log_(WARN, "hip suite at I = %d\n", hip_a->hit_suite);
-  int j_size = auth_key_len_hit_suite(hip_a->hit_suite);
-  //log_(WARN, "j size = %d\n", j_size);
-  memcpy(&sol->cookie, &cookie, sizeof(hipcookie));
-  if ((err = solve_puzzle(&cookie, &solution,
-                          &hip_a->hi->hit, &hip_a->peer_hi->hit, j_size)) < 0)
+  int hit_suite_id = (int)hip_a->peer_hi->hit_suite_id;
+  int rhash_len = auth_key_len_hit_suite(hit_suite_id);
+  /* rhash_len here is in bytes, so the lenght of the solution is calculated correctly */
+  sol->length = htons(4+rhash_len*2);
+  /* insert the cookie in the buffer except the I parameter */
+  memcpy(&sol->cookie, &cookie, sizeof(hipcookie)-sizeof(unsigned char*));
+  /* insert the I parameter in the buffer */
+  memcpy(&sol->cookie.i, cookie.i, rhash_len);
+  location += sizeof(tlv_solution) - 2*sizeof(unsigned char*) + rhash_len;
+  solution = (unsigned char*)malloc(rhash_len);
+  if ((err = solve_puzzle(&cookie, solution,
+                          &hip_a->hi->hit, &hip_a->peer_hi->hit, rhash_len)) < 0)
     {
       return(err);
     }
-  sol->j = solution;       /* already in network byte order */
+  memcpy(&buff[location], solution, rhash_len); /* insert J parameter */
   hip_a->cookie_j = solution;       /* saved for use with keying material */
-  location += sizeof(tlv_solution);
+  location += rhash_len;
   location = eight_byte_align(location);
 
   log_(NORM, "Sending the I2 cookie: ");
-  print_cookie(&cookie);
-  log_(NORM, "solution: 0x%llx\n",solution);
+  print_cookie(&cookie, rhash_len);
+  log_(NORM, "with solution j: ");
+  print_hex(solution, rhash_len);
+  log_(NORM, "\n");
 
   /* now that we have the solution, we can compute the keymat */
   compute_keys(hip_a);

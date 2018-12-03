@@ -350,7 +350,7 @@ typedef struct _hip_assoc {
   __u32 spi_out;
   __u32 spi_nat;
   hipcookie cookie_r;
-  __u64 cookie_j;
+  unsigned char *cookie_j;
   struct hip_packet_entry rexmt_cache;
   struct opaque_entry *opaque;
   struct reg_entry *regs;         /* registrations with registrar or client */
@@ -589,7 +589,7 @@ typedef struct _tlv_solution
   __u16 type;
   __u16 length;
   hipcookie cookie;
-  __u64 j;
+  unsigned char *j;
 } tlv_solution;
 
 typedef	struct	_tlv_dh_group_list

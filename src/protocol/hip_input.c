@@ -752,7 +752,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         {
           memcpy(&hip_a->cookie_r, &cookie_tmp,sizeof(hipcookie));
           log_(NORM, "Got the R1 cookie: ");
-          print_cookie(&hip_a->cookie_r);
+          print_cookie(&hip_a->cookie_r, rhash_len);
         }
       else if (type == PARAM_DIFFIE_HELLMAN)
         {
@@ -1071,7 +1071,9 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   tlv_esp_info *esp_info;
   unsigned char *hmac;
   hipcookie cookie;
-  __u64 solution = 0, r1count = 0;
+  unsigned char* solution;
+  int rhash_len = auth_key_len_hit_suite((int)my_host_id->hit_suite_id);
+  __u64 r1count = 0;
   __u16 *p;
   __u8 g_id = 0;
   unsigned char *dh_secret_key;
@@ -1144,10 +1146,13 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
           memcpy(&cookie, &((tlv_solution*)tlv)->cookie,
                  sizeof(hipcookie));
           /* integers remain in network byte order */
-          solution = ((tlv_solution*)tlv)->j;
+          solution = (unsigned char*)malloc(rhash_len);
+          memcpy(solution, &((tlv_solution*)tlv)->j, rhash_len);
           log_(NORM, "Got the I2 cookie: ");
-          print_cookie(&cookie);
-          log_(NORM, "solution: 0x%llx\n",solution);
+          print_cookie(&cookie, rhash_len);
+          log_(NORM, "with solution: 0x");
+          print_hex(solution, rhash_len);
+          log_(NORM, "\n");
           i = compute_R1_cache_index(&hiph->hit_sndr, TRUE);
           j = compute_R1_cache_index(&hiph->hit_sndr, FALSE);
           /* locate cookie using current random number */
