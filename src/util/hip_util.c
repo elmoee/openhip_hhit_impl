@@ -2236,23 +2236,23 @@ int khi_hi_input(hi_node *hi, __u8 *out)
                               RSA_size(hi->rsa));
       break;
     case HI_ALG_ECDSA:
-      // Add curv id to the first to bytes of out, then add public key to the rest of out.
+      // Add curve id to the first to bytes of out, then add public key to the rest of out.
       location = 0;
       BN_CTX * bn_ctx = BN_CTX_new();
       const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
       const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
-      int curv_name = EC_GROUP_get_curve_name(ec_group);
+      int curve_name = EC_GROUP_get_curve_name(ec_group);
       __u16 *p =  (__u16*) &out[location];
-      *p = htons(curv_name);
+      *p = htons(curve_name);
       location += 2;
       size_t public_key_hex_size =  EC_POINT_point2oct(ec_group, ec_point,
                                                        POINT_CONVERSION_UNCOMPRESSED,
                                                        NULL, 0, bn_ctx);
       
-      public_key_hex_size = EC_POINT_point2oct(ec_group, ec_point,
-                                               POINT_CONVERSION_UNCOMPRESSED,
-                                               &out[location], public_key_hex_size,
-                                               bn_ctx);
+      EC_POINT_point2oct(ec_group, ec_point,
+                         POINT_CONVERSION_UNCOMPRESSED,
+                         &out[location], public_key_hex_size,
+                         bn_ctx);
       BN_CTX_free(bn_ctx); 
       break;
     default:
@@ -2277,6 +2277,7 @@ int khi_hi_input(hi_node *hi, __u8 *out)
  */
 int hi_to_hit(hi_node *hi, hip_hit hit, int type)
 {
+  printf("Running hi_to_hit with hit: %s with type = %d", hit, type);
   int len, hash_len;
   __u8 *data = NULL;
   SHA_CTX sha1_ctx;
@@ -2327,7 +2328,7 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
         }
       len = sizeof(khi_context_id);
       len += 2;  // Two bytes for the curv_name
-      // Get key lenght and add to len
+      // Get key length and add to len
       const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
       const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
       len +=  EC_POINT_point2oct(ec_group, ec_point,
@@ -2375,7 +2376,10 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
       hash_len = SHA_DIGEST_LENGTH;
       break;
     default:
-      return(-1);
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, len);
+      SHA256_Final(hash, &sha256_ctx);
+      hash_len = SHA256_DIGEST_LENGTH;
     }
 
 

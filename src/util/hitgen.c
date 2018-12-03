@@ -171,7 +171,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
           fprintf(stderr, "EC_KEY_new_by_curve_name() failed.\n");
           exit(1);
         }
-      printf("Generating ECDSA keys for HI...");
+      printf("Generating ECDSA keys for HI...\n");
       success = EC_KEY_generate_key(ecdsa);
 
       if (!success)
@@ -251,7 +251,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
                     EC_KEY_get0_group(ecdsa),
                     EC_KEY_get0_public_key(ecdsa),
                     POINT_CONVERSION_UNCOMPRESSED,
-                    BN_CTX_new())
+                    0)
       );
       break;
     default:
