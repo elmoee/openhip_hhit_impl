@@ -1257,7 +1257,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
           /* Must compute keys here so we can use them below. */
           if (got_dh)
           {
-            hip_a -> hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+            // TODO This should not be here, look in to how to decide the suite.
+            hip_a -> hit_suite = HIT_SUITE_4BIT_ECDSA_SHA384;
             compute_keys(hip_a);
             if (proposed_keymat_index >
                 hip_a->keymat_index)
