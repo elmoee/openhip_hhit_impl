@@ -1143,11 +1143,19 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
         }
       else if (type == PARAM_SOLUTION)
         {
+          /* handle the puzzle solution */
+          int cookie_location = location;
+          /* retrieve everything in the cookie except the I parameter */
           memcpy(&cookie, &((tlv_solution*)tlv)->cookie,
-                 sizeof(hipcookie));
-          /* integers remain in network byte order */
+                 sizeof(hipcookie)-sizeof(unsigned char*));
+          cookie_location += sizeof(tlv_solution)- 2*sizeof(unsigned char*);
+          /* set the I parameter */
+          cookie.i = (unsigned char*)malloc(rhash_len);
+          memcpy(cookie.i, (unsigned char*)&data[cookie_location], rhash_len);
+          cookie_location += rhash_len;
+          /* retrieve the solution parameter J */
           solution = (unsigned char*)malloc(rhash_len);
-          memcpy(solution, &((tlv_solution*)tlv)->j, rhash_len);
+          memcpy(solution, (unsigned char*)&data[cookie_location], rhash_len);
           log_(NORM, "Got the I2 cookie: ");
           print_cookie(&cookie, rhash_len);
           log_(NORM, "with solution: 0x");
@@ -1160,12 +1168,12 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
             my_host_id->r1_cache[HCNF.dh_group][i].current_puzzle,
             &cookie,
             &hiph->hit_sndr, &hiph->hit_rcvr,
-            solution) == 0) ||
+            solution, rhash_len) == 0) ||
             (validate_solution(
                 my_host_id->r1_cache[HCNF.dh_group][i].previous_puzzle,
                 &cookie,
                 &hiph->hit_sndr, &hiph->hit_rcvr,
-                solution) == 0))
+                solution, rhash_len) == 0))
         {
           dh_entry = my_host_id->r1_cache[HCNF.dh_group][i].dh_entry;
           /* locate cookie using previous random number */
@@ -1175,13 +1183,13 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                 current_puzzle,
             &cookie,
             &hiph->hit_sndr, &hiph->hit_rcvr,
-            solution) == 0) ||
+            solution, rhash_len) == 0) ||
                  (validate_solution(
                      my_host_id->r1_cache[HCNF.dh_group][j].
                          previous_puzzle,
                      &cookie,
                      &hiph->hit_sndr, &hiph->hit_rcvr,
-                     solution) == 0))
+                     solution, rhash_len) == 0))
           {
             dh_entry = my_host_id->r1_cache[HCNF.dh_group][j].dh_entry;
           }

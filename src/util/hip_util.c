@@ -1952,8 +1952,10 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
   int ij_index = 0;
   memcpy(ij_part1, cookie->i, rhash_len);
   ij_index += rhash_len;
+  /* Initiator's HIT*/
   memcpy(ij_part1+ij_index, hit_i, sizeof(hip_hit));
   ij_index += sizeof(hip_hit);
+  /* Responder's HIT*/
   memcpy(ij_part1+ij_index, hit_r, sizeof(hip_hit));
   ij_index += sizeof(hip_hit);
 
@@ -2029,10 +2031,12 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
  * TODO: puzzle fix. Fix so more than only SHA256 can be used
  */
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
-                      hip_hit* hit_i, hip_hit* hit_r, unsigned char *solution)
+                      hip_hit* hit_i, hip_hit* hit_r, unsigned char *solution,
+                      int rhash_len)
 {
-  unsigned char md[SHA256_DIGEST_LENGTH];
-  unsigned char ij[48];
+  unsigned char *md = (unsigned char *)malloc(rhash_len);
+  size_t ij_size = 2*rhash_len + 2*sizeof(hip_hit);
+  unsigned char *ij = (unsigned char *)malloc(ij_size);
   __u8 k;
   SHA256_CTX c;
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
@@ -2050,11 +2054,14 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
     }
 
   /* check that K, OPAQUE, I are equal */
-  if (cookie_r->i != cookie_i->i)
+  if (memcmp(cookie_r->i, cookie_i->i, rhash_len))
     {
       log_(NORM, "Puzzle and solution have different I's: ");
-      log_(NORM, "puzzle 0x%llx, solution 0x%llx\n",
-           cookie_r->i, cookie_i->i);
+      log_(NORM, "puzzle 0x");
+      print_hex(cookie_r->i, rhash_len);
+      log_(NORM, "solution 0x");
+      print_hex(cookie_i->i, rhash_len);
+      log_(NORM, "\n");
       return(-1);
     }
   else if (cookie_r->k != cookie_i->k)
@@ -2072,20 +2079,24 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
       return(-1);
     }
 
-  memcpy(&ij[0], &(cookie_r->i), 8);
+  int ij_index = 0;
+  memcpy(ij, cookie_r->i, rhash_len);
+  ij_index += rhash_len;
   /* Initiator's HIT*/
-  memcpy(&ij[8], hit_i, 16);
+  memcpy(ij+ij_index, hit_i, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
   /* Responder's HIT*/
-  memcpy(&ij[24], hit_r, 16);
-  memcpy(&ij[40], &solution, 8);
+  memcpy(ij+ij_index, hit_r, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
+  memcpy(ij+ij_index, solution, rhash_len);
   k =  cookie_r->k;
   log_(NORM, "Verifying cookie to %u bits\n", k);
 
   SHA256_Init(&c);
-  SHA256_Update(&c, ij, 48);
+  SHA256_Update(&c, ij, ij_size);
   SHA256_Final(md, &c);
 
-  if (compare_bits((char *)md, SHA256_DIGEST_LENGTH, zero, 8, k) == 0)
+  if (compare_bits((char *)md, rhash_len, zero, 8, k) == 0)
     {
       log_(NORM, "Cookie verified ok.\n");
       return(0);
@@ -2093,9 +2104,9 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
   else
     {
       log_(NORM, "ij given = ");
-      print_hex(ij, 48);
-      log_(NORM, " SHA256 = ");
-      print_hex(md, SHA256_DIGEST_LENGTH);
+      print_hex(ij, ij_size);
+      log_(NORM, " MD = ");
+      print_hex(md, rhash_len);
       log_(WARN, "Cookie did not pass verification.\n");
       if (OPT.permissive)
         {
