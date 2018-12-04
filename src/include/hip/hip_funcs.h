@@ -107,7 +107,7 @@ int hip_send_I1(hip_hit* hit, hip_assoc *hip_a);
 int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
                 hi_node *hi, hip_assoc *hip_rvs);
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
-                    dh_cache_entry *dh_entry, int rhash_len);
+                    dh_cache_entry *dh_entry, size_t rhash_len);
 int hip_send_I2(hip_assoc *hip_a);
 int hip_send_R2(hip_assoc *hip_a);
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
@@ -218,10 +218,10 @@ int hit_to_str(char *hit_str, const hip_hit hit);
 int addr_to_str(struct sockaddr *addr, __u8 *data, int len);
 int hex_to_bin(char *src, char *dst, int dst_len);
 int solve_puzzle(hipcookie *cookie, unsigned char *solution,
-                 hip_hit *hit_i, hip_hit *hit_r, int rhash_len);
+                 hip_hit *hit_i, hip_hit *hit_r, size_t rhash_len);
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit *hit_i, hip_hit *hit_r, unsigned char *solution,
-                      int rhash_len);
+                      size_t rhash_len);
 int hi_to_hit(hi_node *hi, hip_hit hit);
 int validate_hit(hip_hit hit, hi_node *hi);
 void print_hex(const void *data, int len);

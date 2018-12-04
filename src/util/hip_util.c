@@ -1933,7 +1933,7 @@ int hex_to_bin(char *src, char *dst, int dst_len)
  * TODO: puzzle fix. Fix so not only using SHA256 and to use different sizes of i
  */
 int solve_puzzle(hipcookie *cookie, unsigned char *solution,
-                 hip_hit *hit_i, hip_hit *hit_r, int rhash_len)
+                 hip_hit *hit_i, hip_hit *hit_r, size_t rhash_len)
 {
   /* For birthday cookie */
   unsigned int i = 0, lifetime_sec;
@@ -2032,7 +2032,7 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
  */
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit* hit_i, hip_hit* hit_r, unsigned char *solution,
-                      int rhash_len)
+                      size_t rhash_len)
 {
   unsigned char *md = (unsigned char *)malloc(rhash_len);
   size_t ij_size = 2*rhash_len + 2*sizeof(hip_hit);

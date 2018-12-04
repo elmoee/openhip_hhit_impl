@@ -329,7 +329,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
  *
  */
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
-                    dh_cache_entry *dh_entry, int rhash_len)
+                    dh_cache_entry *dh_entry, size_t rhash_len)
 {
   hiphdr *hiph;
   int location = 0, cookie_location = 0;
@@ -553,7 +553,7 @@ int hip_send_I2(hip_assoc *hip_a)
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
   int hit_suite_id = (int)hip_a->peer_hi->hit_suite_id;
-  int rhash_len = auth_key_len_hit_suite(hit_suite_id);
+  size_t rhash_len = auth_key_len_hit_suite(hit_suite_id);
   /* rhash_len here is in bytes, so the lenght of the solution is calculated correctly */
   sol->length = htons(4+rhash_len*2);
   /* insert the cookie in the buffer except the I parameter */

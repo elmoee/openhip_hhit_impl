@@ -591,7 +591,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
   struct sockaddr_storage rvs_addr;
   size_t i_pointer_size = sizeof(unsigned char*);
   int hit_suite_id = (int)hip_a->peer_hi->hit_suite_id;
-  int rhash_len = auth_key_len_hit_suite(hit_suite_id);
+  size_t rhash_len = auth_key_len_hit_suite(hit_suite_id);
 
   location = 0;
   hiph = (hiphdr*) &data[location];
@@ -1072,7 +1072,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   unsigned char *hmac;
   hipcookie cookie;
   unsigned char* solution;
-  int rhash_len = auth_key_len_hit_suite((int)my_host_id->hit_suite_id);
+  size_t rhash_len = auth_key_len_hit_suite((int)my_host_id->hit_suite_id);
   __u64 r1count = 0;
   __u16 *p;
   __u8 g_id = 0;
