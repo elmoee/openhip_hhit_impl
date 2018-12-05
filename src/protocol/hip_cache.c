@@ -138,8 +138,8 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
   for (i = 0; i < R1_CACHE_SIZE; i++)
     {
       entry = &hi->r1_cache[dh_group][i];
-      int i_size = auth_key_len_hit_suite((int)hi->hit_suite_id);
-      entry->current_puzzle = generate_cookie(i_size);
+      size_t rhash_len = auth_key_len_hit_suite((int)hi->hit_suite_id);
+      entry->current_puzzle = generate_cookie(rhash_len);
       entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
       // TODO: move len, only do once
@@ -153,7 +153,7 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
       entry->len = hip_generate_R1(entry->packet, hi,
                                    entry->current_puzzle,
                                    entry->dh_entry,
-                                   i_size);
+                                   rhash_len);
       entry->previous_puzzle = NULL;
       gettimeofday(&entry->creation_time, NULL);
     }
@@ -169,15 +169,15 @@ void init_R1_cache(hi_node *hi, __u8 dh_group)
  *
  * Generates a new random cookie puzzle.
  */
-hipcookie *generate_cookie(int i_size)
+hipcookie *generate_cookie(size_t rhash_len)
 {
   hipcookie *cookie;
   cookie = (hipcookie*) malloc(sizeof(hipcookie));
   memset(cookie, 0, sizeof(hipcookie));
 
-  cookie->i = (unsigned char*) malloc(i_size);
+  cookie->i = (unsigned char*) malloc(rhash_len);
   /* generate random 64-bit I */
-  RAND_bytes(cookie->i, i_size);
+  RAND_bytes(cookie->i, rhash_len);
   /* K and lifetime are set from configuration */
   cookie->k = (__u8)HCNF.cookie_difficulty;
   cookie->lifetime = (__u8)HCNF.cookie_lifetime;
@@ -219,12 +219,13 @@ void replace_next_R1(__u8 dh_group)
       entry->dh_entry->ref_count--;
       if (entry->previous_puzzle)
         {
+          free(entry->previous_puzzle->i);
           free(entry->previous_puzzle);
         }
       entry->previous_puzzle = entry->current_puzzle;
       /* generate a new R1 entry */
-      int i_size = auth_key_len_hit_suite((int)h->hit_suite_id);
-      entry->current_puzzle = generate_cookie(i_size);
+      int rhash_len = auth_key_len_hit_suite((int)h->hit_suite_id);
+      entry->current_puzzle = generate_cookie(rhash_len);
       entry->dh_entry = get_dh_entry(dh_group, FALSE);
       entry->dh_entry->ref_count++;
       free(entry->packet);
@@ -240,7 +241,7 @@ void replace_next_R1(__u8 dh_group)
                                    h,
                                    entry->current_puzzle,
                                    entry->dh_entry,
-                                   i_size);
+                                   rhash_len);
       gettimeofday(&entry->creation_time, NULL);
 
       /* index is about to roll over, so all R1s have been replaced

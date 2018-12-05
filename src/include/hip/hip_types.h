@@ -99,6 +99,7 @@
 #define MAX_LEGACY_HOSTS 255 /* how many legacy hosts can attached to endbox */
 #endif /* HIP_VPLS */
 #define MAX_MR_CLIENTS MAX_CONNECTIONS /* Number of mobile router clients */
+#define MAX_RHASH_LEN KEY_LEN_SHA384 /* Max lenght of the rhash algorithm */
 
 /*
  * IPsec-related constants

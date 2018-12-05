@@ -589,7 +589,6 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
   __u8 valid_cert = FALSE;
   tlv_via_rvs *via;
   struct sockaddr_storage rvs_addr;
-  size_t i_pointer_size = sizeof(unsigned char*);
   int hit_suite_id = (int)hip_a->peer_hi->hit_suite_id;
   size_t rhash_len = auth_key_len_hit_suite(hit_suite_id);
 
@@ -620,11 +619,14 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
           /* save the cookie, then zero fields for signature */
           tlv_pz = (tlv_puzzle*) tlv;
           /* Calculate real lenght of the cookie including the I variable */
-          size_t hipcookie_len = sizeof(hipcookie) - i_pointer_size + rhash_len;
-          cookie_tmp.i = (unsigned char*) malloc(rhash_len);
+          size_t hipcookie_len = sizeof(hipcookie) - sizeof(unsigned char *) +
+                                 rhash_len;
+          cookie_tmp.i = (unsigned char *) malloc(rhash_len);
 
-          memcpy(&cookie_tmp, &tlv_pz->cookie, sizeof(hipcookie) - i_pointer_size);
-          memcpy(cookie_tmp.i, (unsigned char*)&tlv_pz->cookie+sizeof(hipcookie)-i_pointer_size, rhash_len);
+          memcpy(&cookie_tmp, &tlv_pz->cookie, sizeof(hipcookie) -
+                 sizeof(unsigned char *));
+          memcpy(cookie_tmp.i, (unsigned char *)&tlv_pz->cookie+
+                 sizeof(hipcookie)-sizeof(unsigned char *), rhash_len);
 
           memset(&tlv_pz->cookie, 0, hipcookie_len);
           tlv_pz->cookie.k = cookie_tmp.k;
@@ -750,7 +752,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         }
       else if (type == PARAM_PUZZLE)
         {
-          memcpy(&hip_a->cookie_r, &cookie_tmp,sizeof(hipcookie));
+          memcpy(&hip_a->cookie_r, &cookie_tmp, sizeof(hipcookie));
           log_(NORM, "Got the R1 cookie: ");
           print_cookie(&hip_a->cookie_r, rhash_len);
         }
@@ -1071,7 +1073,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   tlv_esp_info *esp_info;
   unsigned char *hmac;
   hipcookie cookie;
-  unsigned char* solution;
+  unsigned char *solution;
   size_t rhash_len = auth_key_len_hit_suite((int)my_host_id->hit_suite_id);
   __u64 r1count = 0;
   __u16 *p;
@@ -1147,15 +1149,15 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
           int cookie_location = location;
           /* retrieve everything in the cookie except the I parameter */
           memcpy(&cookie, &((tlv_solution*)tlv)->cookie,
-                 sizeof(hipcookie)-sizeof(unsigned char*));
-          cookie_location += sizeof(tlv_solution)- 2*sizeof(unsigned char*);
+                 sizeof(hipcookie)-sizeof(unsigned char *));
+          cookie_location += sizeof(tlv_solution)- 2*sizeof(unsigned char *);
           /* set the I parameter */
-          cookie.i = (unsigned char*)malloc(rhash_len);
-          memcpy(cookie.i, (unsigned char*)&data[cookie_location], rhash_len);
+          cookie.i = (unsigned char *)malloc(rhash_len);
+          memcpy(cookie.i, (unsigned char *)&data[cookie_location], rhash_len);
           cookie_location += rhash_len;
           /* retrieve the solution parameter J */
-          solution = (unsigned char*)malloc(rhash_len);
-          memcpy(solution, (unsigned char*)&data[cookie_location], rhash_len);
+          solution = (unsigned char *)malloc(rhash_len);
+          memcpy(solution, (unsigned char *)&data[cookie_location], rhash_len);
           log_(NORM, "Got the I2 cookie: ");
           print_cookie(&cookie, rhash_len);
           log_(NORM, "with solution: 0x");
@@ -1198,6 +1200,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
             log_(WARN,"Invalid solution received in I2.\n");
             if (!OPT.permissive)
             {
+              free(cookie.i);
+              free(solution);
               return(-1);
             }
           }
@@ -1209,6 +1213,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
               log_(WARN,
                    "Unable to create a HIP association "
                    "while receiving I2.\n");
+              free(cookie.i);
+              free(solution);
               return(-1);
             }
           hip_a->dh_group_id = dh_entry->group_id;
@@ -4862,10 +4868,7 @@ int check_tlv_length(int type, int length)
   switch (type)
     {
     case PARAM_R1_COUNTER:
-    //case PARAM_PUZZLE:
       return(length == 12);
-    //case PARAM_SOLUTION:
-      //return(length == 20);
     case PARAM_HMAC:
     case PARAM_HMAC_2:
       return(length == 64);

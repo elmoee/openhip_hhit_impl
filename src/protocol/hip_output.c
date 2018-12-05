@@ -377,13 +377,11 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* rhash_len is already in bytes size so it should not be divided by 8 */
   puzzle->length = htons(rhash_len + 4);
 
-  size_t i_pointer_size = sizeof(unsigned char*);
-
   /* Calculate real lenght of the cookie including the I variable */
-  len = sizeof(hipcookie) - i_pointer_size + rhash_len;
+  len = sizeof(hipcookie) - sizeof(unsigned char *) + rhash_len;
 
   /* Calculate the real increase in location */
-  size_t puzzle_size = sizeof(tlv_puzzle) - i_pointer_size + rhash_len;
+  size_t puzzle_size = sizeof(tlv_puzzle) - sizeof(unsigned char *) + rhash_len;
   location += puzzle_size;
 
   memset(&puzzle->cookie, 0, sizeof(hipcookie));       /* zero OPAQUE and I fields for SIG */
@@ -435,10 +433,12 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   location += build_tlv_signature(hi, data, location, TRUE);
   hiph->hdr_len = (location / 8) - 1;
   /* insert the cookie OPAQUE parameter */
-  memcpy(&data[cookie_location], cookie, sizeof(hipcookie)-i_pointer_size);
+  memcpy(&data[cookie_location], cookie, sizeof(hipcookie)-
+         sizeof(unsigned char *));
   /* insert the cookie I parameter */
-  cookie_location += sizeof(hipcookie)-i_pointer_size;
+  cookie_location += sizeof(hipcookie)-sizeof(unsigned char *);
   memcpy(&data[cookie_location], cookie->i, rhash_len);
+
   /* if ECHO_REQUEST_NOSIG is needed, put it here */
 
   return(location);
@@ -462,8 +462,8 @@ int hip_send_I2(hip_assoc *hip_a)
   hiphdr *hiph;
   __u8 buff[sizeof(hiphdr)            + sizeof(tlv_esp_info) +
             sizeof(tlv_r1_counter)    +
-            sizeof(tlv_solution)      - 2*sizeof(unsigned char*) +
-            2*48 /*max rhash len */   + sizeof(tlv_diffie_hellman) +
+            sizeof(tlv_solution)      - 2*sizeof(unsigned char *) +
+            2*MAX_RHASH_LEN           + sizeof(tlv_diffie_hellman) +
             DH_MAX_LEN                + sizeof(tlv_hip_cipher) + 2 +
             sizeof(tlv_esp_transform) + sizeof(tlv_encrypted) +
             sizeof(tlv_host_id)       + 1 + DSA_PRIV +
@@ -557,14 +557,15 @@ int hip_send_I2(hip_assoc *hip_a)
   /* rhash_len here is in bytes, so the lenght of the solution is calculated correctly */
   sol->length = htons(4+rhash_len*2);
   /* insert the cookie in the buffer except the I parameter */
-  memcpy(&sol->cookie, &cookie, sizeof(hipcookie)-sizeof(unsigned char*));
+  memcpy(&sol->cookie, &cookie, sizeof(hipcookie)-sizeof(unsigned char *));
   /* insert the I parameter in the buffer */
   memcpy(&sol->cookie.i, cookie.i, rhash_len);
-  location += sizeof(tlv_solution) - 2*sizeof(unsigned char*) + rhash_len;
-  solution = (unsigned char*)malloc(rhash_len);
+  location += sizeof(tlv_solution) - 2*sizeof(unsigned char *) + rhash_len;
+  solution = (unsigned char *)malloc(rhash_len);
   if ((err = solve_puzzle(&cookie, solution,
                           &hip_a->hi->hit, &hip_a->peer_hi->hit, rhash_len)) < 0)
     {
+      free(solution);
       return(err);
     }
   memcpy(&buff[location], solution, rhash_len); /* insert J parameter */

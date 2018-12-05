@@ -1054,6 +1054,14 @@ int free_hip_assoc(hip_assoc *hip_a)
       memset(hip_a->dh_secret, 0, hip_a->dh_secret_len);
       free(hip_a->dh_secret);
     }
+  if (hip_a->cookie_r.i)
+    {
+      free(hip_a->cookie_r.i);
+    }
+  if (hip_a->cookie_j)
+    {
+      free(hip_a->cookie_j);
+    }
   /* erase any residual keying material, set ptrs to NULL  */
   memset(hip_a, 0, sizeof(hip_assoc));
   /* prevent the deleted entry from being used */
@@ -1930,7 +1938,7 @@ int hex_to_bin(char *src, char *dst, int dst_len)
  *
  * Solve the cookie puzzle in max_tries and store the solution, otherwise
  * return error.
- * TODO: puzzle fix. Fix so not only using SHA256 and to use different sizes of i
+ * TODO: fix to not only use SHA256.
  */
 int solve_puzzle(hipcookie *cookie, unsigned char *solution,
                  hip_hit *hit_i, hip_hit *hit_r, size_t rhash_len)
@@ -1968,6 +1976,9 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
     {
       log_(NORM, "Cookie has zero difficulty, using zero solution.\n");
       *solution = 0;
+      free(ij);
+      free(ij_part1);
+      free(md);
       return(0);
     }
   lifetime_sec = 1 << (cookie->lifetime - 32);
@@ -1984,6 +1995,9 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
               log_(WARN, "Couldn't solve puzzle within ");
               log_(NORM, "lifetime of %d (%d tries).\n",
                    lifetime_sec, i);
+              free(ij);
+              free(ij_part1);
+              free(md);
               return(-ERANGE);
             }
         }
@@ -2015,6 +2029,10 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
   print_hex(ij, ij_size);
   log_(NORM, "\n");
 
+  free(ij);
+  free(ij_part1);
+  free(md);
+
   return(0);
 }
 
@@ -2028,15 +2046,12 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
  *              solution = J, the puzzle solution given in I2
  *
  *  out:	Returns 0 if cookie is valid, -1 if invalid or error.
- * TODO: puzzle fix. Fix so more than only SHA256 can be used
+ * TODO: fix so more than only SHA256 can be used.
  */
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit* hit_i, hip_hit* hit_r, unsigned char *solution,
                       size_t rhash_len)
 {
-  unsigned char *md = (unsigned char *)malloc(rhash_len);
-  size_t ij_size = 2*rhash_len + 2*sizeof(hip_hit);
-  unsigned char *ij = (unsigned char *)malloc(ij_size);
   __u8 k;
   SHA256_CTX c;
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
@@ -2079,6 +2094,10 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
       return(-1);
     }
 
+  unsigned char *md = (unsigned char *)malloc(rhash_len);
+  size_t ij_size = 2*rhash_len + 2*sizeof(hip_hit);
+  unsigned char *ij = (unsigned char *)malloc(ij_size);
+
   int ij_index = 0;
   memcpy(ij, cookie_r->i, rhash_len);
   ij_index += rhash_len;
@@ -2099,6 +2118,8 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
   if (compare_bits((char *)md, rhash_len, zero, 8, k) == 0)
     {
       log_(NORM, "Cookie verified ok.\n");
+      free(md);
+      free(ij);
       return(0);
     }
   else
@@ -2108,6 +2129,8 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
       log_(NORM, " MD = ");
       print_hex(md, rhash_len);
       log_(WARN, "Cookie did not pass verification.\n");
+      free(md);
+      free(ij);
       if (OPT.permissive)
         {
           return(0);
@@ -2117,7 +2140,8 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
           return(-1);
         }
     }
-
+  free(md);
+  free(ij);
   return(-1);
 }
 

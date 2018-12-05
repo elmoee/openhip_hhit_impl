@@ -312,7 +312,7 @@ int add_other_addresses_to_hi(hi_node *hi, int mine);
 /* hip_cache.c */
 void init_all_R1_caches();
 void init_R1_cache(hi_node *hi, __u8 dh_group);
-hipcookie *generate_cookie(int i_size);
+hipcookie *generate_cookie(size_t rhash_len);
 void replace_next_R1(__u8 dh_group);
 int compute_R1_cache_index(hip_hit *hiti, __u8 current);
 int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry);
