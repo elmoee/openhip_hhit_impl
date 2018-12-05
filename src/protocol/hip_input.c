@@ -625,8 +625,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
 
           memcpy(&cookie_tmp, &tlv_pz->cookie, sizeof(hipcookie) -
                  sizeof(unsigned char *));
-          memcpy(cookie_tmp.i, (unsigned char *)&tlv_pz->cookie+
-                 sizeof(hipcookie)-sizeof(unsigned char *), rhash_len);
+          memcpy(cookie_tmp.i, (unsigned char *)&tlv_pz->cookie.i, rhash_len);
 
           memset(&tlv_pz->cookie, 0, hipcookie_len);
           tlv_pz->cookie.k = cookie_tmp.k;
@@ -1073,6 +1072,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   tlv_esp_info *esp_info;
   unsigned char *hmac;
   hipcookie cookie;
+  tlv_solution *tlv_sol = NULL;
   unsigned char *solution;
   size_t rhash_len = auth_key_len_hit_suite((int)my_host_id->hit_suite_id);
   __u64 r1count = 0;
@@ -1146,18 +1146,17 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
       else if (type == PARAM_SOLUTION)
         {
           /* handle the puzzle solution */
-          int cookie_location = location;
+          tlv_sol = (tlv_solution*) tlv;
           /* retrieve everything in the cookie except the I parameter */
-          memcpy(&cookie, &((tlv_solution*)tlv)->cookie,
+          memcpy(&cookie, &tlv_sol->cookie,
                  sizeof(hipcookie)-sizeof(unsigned char *));
-          cookie_location += sizeof(tlv_solution)- 2*sizeof(unsigned char *);
           /* set the I parameter */
           cookie.i = (unsigned char *)malloc(rhash_len);
-          memcpy(cookie.i, (unsigned char *)&data[cookie_location], rhash_len);
-          cookie_location += rhash_len;
+          memcpy(cookie.i, &tlv_sol->cookie.i, rhash_len);
           /* retrieve the solution parameter J */
           solution = (unsigned char *)malloc(rhash_len);
-          memcpy(solution, (unsigned char *)&data[cookie_location], rhash_len);
+          memcpy(solution, (unsigned char *)&tlv_sol->cookie.i+rhash_len,
+                 rhash_len);
           log_(NORM, "Got the I2 cookie: ");
           print_cookie(&cookie, rhash_len);
           log_(NORM, "with solution: 0x");
