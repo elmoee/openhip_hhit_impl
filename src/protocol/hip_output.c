@@ -384,7 +384,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   size_t puzzle_size = sizeof(tlv_puzzle) - sizeof(unsigned char *) + rhash_len;
   location += puzzle_size;
 
-  memset(&puzzle->cookie, 0, sizeof(hipcookie));       /* zero OPAQUE and I fields for SIG */
+  memset(&puzzle->cookie, 0, len);       /* zero OPAQUE and I fields for SIG */
   puzzle->cookie.k = cookie->k;
   puzzle->cookie.lifetime = cookie->lifetime;
   cookie_location = location - len;
