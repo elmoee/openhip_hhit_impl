@@ -1984,7 +1984,8 @@ int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites)
 
   for (i = 0; (i < HIT_SUITE_4BIT_MAX) && (hit_suites[i] > 0); i++, len++)
   {
-    *hit_suite_id = hit_suites[i];
+    // Convert from 4bit to 8 bit.
+    *hit_suite_id = (hit_suites[i] << 4);
     hit_suite_id++;
   }
 

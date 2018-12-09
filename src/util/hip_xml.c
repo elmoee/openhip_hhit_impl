@@ -207,6 +207,7 @@ void parse_xml_attributes(xmlAttrPtr attr, hi_node *hi)
         {
           sscanf(value, "%d", &tmp);
           hi->hit_suite_id = (char)tmp;
+          HCNF.hit_suite_list[0] = hi->hit_suite_id;
         }
       else if (strcmp((char *)attr->name, "r1count") == 0)
         {

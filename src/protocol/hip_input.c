@@ -952,8 +952,9 @@ restore_saved_peer_hi:
 
 int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length) {
   for(int i = 0; i < length; i++, id++){
-    if(*id == hip_a->hi->hit_suite_id){
-      hip_a -> hit_suite = *id;
+    // Left shift to convert from 8bit to 4bit.
+    if((*id >> 4) == hip_a->hi->hit_suite_id){
+      hip_a -> hit_suite = (*id >> 4);
       return(0);
     }
   }
