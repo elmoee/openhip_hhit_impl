@@ -1258,8 +1258,9 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
           /* Must compute keys here so we can use them below. */
           if (got_dh)
           {
-            // TODO This should not be here, look in to how to decide the suite.
-            hip_a -> hit_suite = HIT_SUITE_4BIT_ECDSA_SHA384;
+            // TODO Could this be here? Look in to how to decide the suite in 
+            // I2 packet.
+            hip_a -> hit_suite = hip_a->hi->hit_suite_id;
             compute_keys(hip_a);
             if (proposed_keymat_index >
                 hip_a->keymat_index)
