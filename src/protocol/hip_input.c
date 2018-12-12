@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -355,9 +355,9 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
             }
         }
         else if (type == PARAM_DH_GROUP_LIST){
-          
+
                 tlv_dh_group_list *dhGroupList = (tlv_dh_group_list*) &data[location];
-          
+
                 if ((handle_dh_groups(&dhGroupList->group_id, length, true)) < 0)
                 {
                   hip_send_notify(
@@ -367,7 +367,7 @@ int hip_parse_I1(hip_assoc *hip_a, const __u8 *data, hip_hit *hiti,
                       0);
                   return(-1);
                 }
-          
+
               }
       else
         {
@@ -584,11 +584,13 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
   tlv_puzzle *tlv_pz = NULL;
   dh_cache_entry *dh_entry;
   hi_node saved_peer_hi;
-  hipcookie cookie_tmp = { 0, 0, 0, 0 };
+  hipcookie cookie_tmp;
   __u64 gen;
   __u8 valid_cert = FALSE;
   tlv_via_rvs *via;
   struct sockaddr_storage rvs_addr;
+  int hit_suite_id = (int)hip_a->peer_hi->hit_suite_id;
+  size_t rhash_len = auth_key_len_hit_suite(hit_suite_id);
 
   location = 0;
   hiph = (hiphdr*) &data[location];
@@ -616,8 +618,16 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         {
           /* save the cookie, then zero fields for signature */
           tlv_pz = (tlv_puzzle*) tlv;
-          memcpy(&cookie_tmp, &tlv_pz->cookie, sizeof(hipcookie));
-          memset(&tlv_pz->cookie, 0, sizeof(hipcookie));
+          /* Calculate real lenght of the cookie including the I variable */
+          size_t hipcookie_len = sizeof(hipcookie) - sizeof(unsigned char *) +
+                                 rhash_len;
+          cookie_tmp.i = (unsigned char *) malloc(rhash_len);
+
+          memcpy(&cookie_tmp, &tlv_pz->cookie, sizeof(hipcookie) -
+                 sizeof(unsigned char *));
+          memcpy(cookie_tmp.i, (unsigned char *)&tlv_pz->cookie.i, rhash_len);
+
+          memset(&tlv_pz->cookie, 0, hipcookie_len);
           tlv_pz->cookie.k = cookie_tmp.k;
           tlv_pz->cookie.lifetime = cookie_tmp.lifetime;
         }
@@ -741,9 +751,9 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         }
       else if (type == PARAM_PUZZLE)
         {
-          memcpy(&hip_a->cookie_r, &cookie_tmp,sizeof(hipcookie));
+          memcpy(&hip_a->cookie_r, &cookie_tmp, sizeof(hipcookie));
           log_(NORM, "Got the R1 cookie: ");
-          print_cookie(&hip_a->cookie_r);
+          print_cookie(&hip_a->cookie_r, rhash_len);
         }
       else if (type == PARAM_DIFFIE_HELLMAN)
         {
@@ -1062,7 +1072,10 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   tlv_esp_info *esp_info;
   unsigned char *hmac;
   hipcookie cookie;
-  __u64 solution = 0, r1count = 0;
+  tlv_solution *tlv_sol = NULL;
+  unsigned char *solution;
+  size_t rhash_len = auth_key_len_hit_suite((int)my_host_id->hit_suite_id);
+  __u64 r1count = 0;
   __u16 *p;
   __u8 g_id = 0;
   unsigned char *dh_secret_key;
@@ -1074,7 +1087,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
   __u8 valid_cert = FALSE;
 
   hip_a_existing = *hip_ar;
-  
+
   /* Find hip header */
   location = 0;
   hiph = (hiphdr*) &data[location];
@@ -1132,13 +1145,23 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
         }
       else if (type == PARAM_SOLUTION)
         {
-          memcpy(&cookie, &((tlv_solution*)tlv)->cookie,
-                 sizeof(hipcookie));
-          /* integers remain in network byte order */
-          solution = ((tlv_solution*)tlv)->j;
+          /* handle the puzzle solution */
+          tlv_sol = (tlv_solution*) tlv;
+          /* retrieve everything in the cookie except the I parameter */
+          memcpy(&cookie, &tlv_sol->cookie,
+                 sizeof(hipcookie)-sizeof(unsigned char *));
+          /* set the I parameter */
+          cookie.i = (unsigned char *)malloc(rhash_len);
+          memcpy(cookie.i, &tlv_sol->cookie.i, rhash_len);
+          /* retrieve the solution parameter J */
+          solution = (unsigned char *)malloc(rhash_len);
+          memcpy(solution, (unsigned char *)&tlv_sol->cookie.i+rhash_len,
+                 rhash_len);
           log_(NORM, "Got the I2 cookie: ");
-          print_cookie(&cookie);
-          log_(NORM, "solution: 0x%llx\n",solution);
+          print_cookie(&cookie, rhash_len);
+          log_(NORM, "with solution: 0x");
+          print_hex(solution, rhash_len);
+          log_(NORM, "\n");
           i = compute_R1_cache_index(&hiph->hit_sndr, TRUE);
           j = compute_R1_cache_index(&hiph->hit_sndr, FALSE);
           /* locate cookie using current random number */
@@ -1146,12 +1169,12 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
             my_host_id->r1_cache[HCNF.dh_group][i].current_puzzle,
             &cookie,
             &hiph->hit_sndr, &hiph->hit_rcvr,
-            solution) == 0) ||
+            solution, rhash_len) == 0) ||
             (validate_solution(
                 my_host_id->r1_cache[HCNF.dh_group][i].previous_puzzle,
                 &cookie,
                 &hiph->hit_sndr, &hiph->hit_rcvr,
-                solution) == 0))
+                solution, rhash_len) == 0))
         {
           dh_entry = my_host_id->r1_cache[HCNF.dh_group][i].dh_entry;
           /* locate cookie using previous random number */
@@ -1161,13 +1184,13 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                 current_puzzle,
             &cookie,
             &hiph->hit_sndr, &hiph->hit_rcvr,
-            solution) == 0) ||
+            solution, rhash_len) == 0) ||
                  (validate_solution(
                      my_host_id->r1_cache[HCNF.dh_group][j].
                          previous_puzzle,
                      &cookie,
                      &hiph->hit_sndr, &hiph->hit_rcvr,
-                     solution) == 0))
+                     solution, rhash_len) == 0))
           {
             dh_entry = my_host_id->r1_cache[HCNF.dh_group][j].dh_entry;
           }
@@ -1176,6 +1199,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
             log_(WARN,"Invalid solution received in I2.\n");
             if (!OPT.permissive)
             {
+              free(cookie.i);
+              free(solution);
               return(-1);
             }
           }
@@ -1187,6 +1212,8 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
               log_(WARN,
                    "Unable to create a HIP association "
                    "while receiving I2.\n");
+              free(cookie.i);
+              free(solution);
               return(-1);
             }
           hip_a->dh_group_id = dh_entry->group_id;
@@ -3104,7 +3131,7 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild)
         EVP_PKEY_derive(ctx, NULL, &hip_a -> dh_secret_len);
         dh_secret_key = (unsigned char *)OPENSSL_malloc(hip_a -> dh_secret_len);
         EVP_PKEY_derive(ctx, dh_secret_key, &hip_a -> dh_secret_len);
-    
+
         set_secret_key(dh_secret_key, hip_a);
         keymat_index = 0;
         compute_keymat(hip_a);
@@ -4840,10 +4867,7 @@ int check_tlv_length(int type, int length)
   switch (type)
     {
     case PARAM_R1_COUNTER:
-    case PARAM_PUZZLE:
       return(length == 12);
-    case PARAM_SOLUTION:
-      return(length == 20);
     case PARAM_HMAC:
     case PARAM_HMAC_2:
       return(length == 64);
@@ -5254,18 +5278,18 @@ int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
     __u8 *dh_group_list;
     __u8 dh_group_id;
     __u16 available_group_id;
-  
-  
+
+
     if(is_responder){
       dh_group_list = HCNF.dh_group_list;
       available_group_id = conf_dh_group_ids_to_mask(dh_group_ids,length);
       length = DH_MAX-1;
     } else{
-  
+
       dh_group_list =  dh_group_ids;
       available_group_id = conf_dh_group_ids_to_mask(HCNF.dh_group_list, DH_MAX-1);
     }
-  
+
     HCNF.dh_group = 0;
     if (length >= DH_MAX)
     {
@@ -5274,7 +5298,7 @@ int handle_dh_groups(__u8 *dh_group_ids, int length, bool is_responder){
            length, DH_MAX - 1);
       /* continue to read the group ids... */
     }
-  
+
     for (int i = 0; (i < length); dh_group_list++,
         i++)
     {

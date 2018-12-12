@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -99,6 +99,7 @@
 #define MAX_LEGACY_HOSTS 255 /* how many legacy hosts can attached to endbox */
 #endif /* HIP_VPLS */
 #define MAX_MR_CLIENTS MAX_CONNECTIONS /* Number of mobile router clients */
+#define MAX_RHASH_LEN KEY_LEN_SHA384 /* Max lenght of the rhash algorithm */
 
 /*
  * IPsec-related constants
@@ -274,8 +275,8 @@ typedef struct _hipcookie {
   __u8 k;
   __u8 lifetime;
   __u16 opaque;
-  __u64 i __attribute__ ((packed));
-} hipcookie;
+  unsigned char *i;
+} __attribute__ ((packed)) hipcookie;
 
 struct key_entry {
   int type;
@@ -350,7 +351,7 @@ typedef struct _hip_assoc {
   __u32 spi_out;
   __u32 spi_nat;
   hipcookie cookie_r;
-  __u64 cookie_j;
+  unsigned char *cookie_j;
   struct hip_packet_entry rexmt_cache;
   struct opaque_entry *opaque;
   struct reg_entry *regs;         /* registrations with registrar or client */
@@ -589,7 +590,7 @@ typedef struct _tlv_solution
   __u16 type;
   __u16 length;
   hipcookie cookie;
-  __u64 j;
+  unsigned char *j;
 } tlv_solution;
 
 typedef	struct	_tlv_dh_group_list
@@ -934,5 +935,3 @@ struct hip_conf {
 };
 
 #endif /* _HIP_TYPES_H_*/
-
-

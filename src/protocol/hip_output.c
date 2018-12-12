@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -329,7 +329,7 @@ int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
  *
  */
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
-                    dh_cache_entry *dh_entry)
+                    dh_cache_entry *dh_entry, size_t rhash_len)
 {
   hiphdr *hiph;
   int location = 0, cookie_location = 0;
@@ -374,9 +374,16 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* build the PUZZLE TLV */
   puzzle = (tlv_puzzle*) &data[location];
   puzzle->type = htons(PARAM_PUZZLE);
-  puzzle->length = htons(sizeof(tlv_puzzle) - 4);
-  location += sizeof(tlv_puzzle);
-  len = sizeof(hipcookie);
+  /* rhash_len is already in bytes size so it should not be divided by 8 */
+  puzzle->length = htons(rhash_len + 4);
+
+  /* Calculate real lenght of the cookie including the I variable */
+  len = sizeof(hipcookie) - sizeof(unsigned char *) + rhash_len;
+
+  /* Calculate the real increase in location */
+  size_t puzzle_size = sizeof(tlv_puzzle) - sizeof(unsigned char *) + rhash_len;
+  location += puzzle_size;
+
   memset(&puzzle->cookie, 0, len);       /* zero OPAQUE and I fields for SIG */
   puzzle->cookie.k = cookie->k;
   puzzle->cookie.lifetime = cookie->lifetime;
@@ -384,7 +391,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   if (D_VERBOSE == OPT.debug_R1)
     {
       log_(NORM, "Cookie sent in R1: ");
-      print_cookie(cookie);
+      print_cookie(cookie, rhash_len);
     }
   location = eight_byte_align(location);
 
@@ -425,8 +432,12 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
 
   location += build_tlv_signature(hi, data, location, TRUE);
   hiph->hdr_len = (location / 8) - 1;
-  /* insert the cookie (OPAQUE and I) */
-  memcpy(&data[cookie_location], cookie, sizeof(hipcookie));
+  /* insert the cookie OPAQUE parameter */
+  memcpy(&data[cookie_location], cookie, sizeof(hipcookie)-
+         sizeof(unsigned char *));
+  /* insert the cookie I parameter */
+  cookie_location += sizeof(hipcookie)-sizeof(unsigned char *);
+  memcpy(&data[cookie_location], cookie->i, rhash_len);
 
   /* if ECHO_REQUEST_NOSIG is needed, put it here */
 
@@ -451,7 +462,8 @@ int hip_send_I2(hip_assoc *hip_a)
   hiphdr *hiph;
   __u8 buff[sizeof(hiphdr)            + sizeof(tlv_esp_info) +
             sizeof(tlv_r1_counter)    +
-            sizeof(tlv_solution)      + sizeof(tlv_diffie_hellman) +
+            sizeof(tlv_solution)      - 2*sizeof(unsigned char *) +
+            2*MAX_RHASH_LEN           + sizeof(tlv_diffie_hellman) +
             DH_MAX_LEN                + sizeof(tlv_hip_cipher) + 2 +
             sizeof(tlv_esp_transform) + sizeof(tlv_encrypted) +
             sizeof(tlv_host_id)       + 1 + DSA_PRIV +
@@ -474,7 +486,7 @@ int hip_send_I2(hip_assoc *hip_a)
    */
   unsigned char cbc_iv[16] = {0};
 
-  __u64 solution = 0;
+  unsigned char *solution;
 
   tlv_r1_counter *r1cnt;
   tlv_esp_info *esp_info;
@@ -540,21 +552,32 @@ int hip_send_I2(hip_assoc *hip_a)
   /* puzzle solution */
   sol = (tlv_solution*) &buff[location];
   sol->type = htons(PARAM_SOLUTION);
-  sol->length = htons(20); //TODO: change to new standard ISSUE Puzzle/Solution length(R1, I2)
-  memcpy(&sol->cookie, &cookie, sizeof(hipcookie));
-  if ((err = solve_puzzle(&cookie, &solution,
-                          &hip_a->hi->hit, &hip_a->peer_hi->hit)) < 0)
+  int hit_suite_id = (int)hip_a->peer_hi->hit_suite_id;
+  size_t rhash_len = auth_key_len_hit_suite(hit_suite_id);
+  /* rhash_len here is in bytes, so the lenght of the solution is calculated correctly */
+  sol->length = htons(4+rhash_len*2);
+  /* insert the cookie in the buffer except the I parameter */
+  memcpy(&sol->cookie, &cookie, sizeof(hipcookie)-sizeof(unsigned char *));
+  /* insert the I parameter in the buffer */
+  memcpy(&sol->cookie.i, cookie.i, rhash_len);
+  location += sizeof(tlv_solution) - 2*sizeof(unsigned char *) + rhash_len;
+  solution = (unsigned char *)malloc(rhash_len);
+  if ((err = solve_puzzle(&cookie, solution,
+                          &hip_a->hi->hit, &hip_a->peer_hi->hit, rhash_len)) < 0)
     {
+      free(solution);
       return(err);
     }
-  sol->j = solution;       /* already in network byte order */
+  memcpy(&buff[location], solution, rhash_len); /* insert J parameter */
   hip_a->cookie_j = solution;       /* saved for use with keying material */
-  location += sizeof(tlv_solution);
+  location += rhash_len;
   location = eight_byte_align(location);
 
   log_(NORM, "Sending the I2 cookie: ");
-  print_cookie(&cookie);
-  log_(NORM, "solution: 0x%llx\n",solution);
+  print_cookie(&cookie, rhash_len);
+  log_(NORM, "with solution j: ");
+  print_hex(solution, rhash_len);
+  log_(NORM, "\n");
 
   /* now that we have the solution, we can compute the keymat */
   compute_keys(hip_a);
@@ -1288,7 +1311,7 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
               (__u8 *)&ticket->hmac_key_index, length_to_hmac,
               hmac_md, &hmac_md_len  );
       break;
-    
+
     default:
       return(0);
       break;
@@ -2680,4 +2703,3 @@ int build_rekey(hip_assoc *hip_a)
 
   return(0);
 }
-

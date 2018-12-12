@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -1054,6 +1054,14 @@ int free_hip_assoc(hip_assoc *hip_a)
       memset(hip_a->dh_secret, 0, hip_a->dh_secret_len);
       free(hip_a->dh_secret);
     }
+  if (hip_a->cookie_r.i)
+    {
+      free(hip_a->cookie_r.i);
+    }
+  if (hip_a->cookie_j)
+    {
+      free(hip_a->cookie_j);
+    }
   /* erase any residual keying material, set ptrs to NULL  */
   memset(hip_a, 0, sizeof(hip_assoc));
   /* prevent the deleted entry from being used */
@@ -1781,11 +1789,14 @@ void cb(int p, int n, void *arg)
     }
 }
 
-void print_cookie(hipcookie *cookie)
+void print_cookie(hipcookie *cookie, size_t i_len)
 {
   __u32 s =  1 << (cookie->lifetime - 32);
-  log_(NORM, "(k=%u lifetime=%d (%u seconds) opaque=%d I=0x%llx)\n",
-       cookie->k, cookie->lifetime, s, cookie->opaque, cookie->i);
+  log_(NORM, "(k=%u lifetime=%d (%u seconds) opaque=%d\n",
+       cookie->k, cookie->lifetime, s, cookie->opaque);
+  log_(NORM, "I=0x");
+  print_hex(cookie->i, i_len);
+  log_(NORM, ")\n");
 }
 
 /*
@@ -1927,28 +1938,37 @@ int hex_to_bin(char *src, char *dst, int dst_len)
  *
  * Solve the cookie puzzle in max_tries and store the solution, otherwise
  * return error.
+ * TODO: fix to not only use SHA256.
  */
-int solve_puzzle(hipcookie *cookie, __u64 *solution,
-                 hip_hit *hit_i, hip_hit *hit_r)
+int solve_puzzle(hipcookie *cookie, unsigned char *solution,
+                 hip_hit *hit_i, hip_hit *hit_r, size_t rhash_len)
 {
   /* For birthday cookie */
   unsigned int i = 0, lifetime_sec;
   int done = 0;
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
-  unsigned char ij[48] = {0};
-  unsigned char ij_part1[40] = {0};
-  unsigned char md[SHA256_DIGEST_LENGTH] = {0};
+  size_t ij_size = 2*rhash_len + 2*sizeof(hip_hit);
+  unsigned char* ij = (unsigned char*)malloc(ij_size);
+  size_t ij_part1_size = rhash_len + 2*sizeof(hip_hit);
+  unsigned char* ij_part1 = (unsigned char*)malloc(ij_part1_size);
+  unsigned char* md = (unsigned char*)malloc(rhash_len);
   SHA256_CTX c;
   int k;
   struct timeval time1, time2;
 
   /* create the first part of the hash material that doesn't change */
-  memcpy(&ij_part1[0], &(cookie->i), 8);
-  memcpy(&ij_part1[8], hit_i, sizeof(hip_hit));
-  memcpy(&ij_part1[24], hit_r, sizeof(hip_hit));
+  int ij_index = 0;
+  memcpy(ij_part1, cookie->i, rhash_len);
+  ij_index += rhash_len;
+  /* Initiator's HIT*/
+  memcpy(ij_part1+ij_index, hit_i, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
+  /* Responder's HIT*/
+  memcpy(ij_part1+ij_index, hit_r, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
 
   log_(NORM, "Using cookie from R1: ");
-  print_cookie(cookie);
+  print_cookie(cookie, rhash_len);
   log_(NORM, "Calculating Ltrunc(SHA256(I|Rand),K)...");
 
   k = cookie->k;
@@ -1956,6 +1976,9 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
     {
       log_(NORM, "Cookie has zero difficulty, using zero solution.\n");
       *solution = 0;
+      free(ij);
+      free(ij_part1);
+      free(md);
       return(0);
     }
   lifetime_sec = 1 << (cookie->lifetime - 32);
@@ -1972,22 +1995,24 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
               log_(WARN, "Couldn't solve puzzle within ");
               log_(NORM, "lifetime of %d (%d tries).\n",
                    lifetime_sec, i);
+              free(ij);
+              free(ij_part1);
+              free(md);
               return(-ERANGE);
             }
         }
-      memcpy(ij, ij_part1, 40);
-      RAND_bytes(&ij[40], 8);
+      memcpy(ij, ij_part1, ij_part1_size);
+      RAND_bytes(ij+ij_index, rhash_len);
       SHA256_Init(&c);
-      SHA256_Update(&c, ij, 48);
+      SHA256_Update(&c, ij, ij_size);
       SHA256_Final(md, &c);
-
       if (!OPT.daemon && (D_VERBOSE == OPT.debug) &&
           ((i % 10000) == 0))
         {
           printf(".");
           fflush(stdout);
         }
-      if (compare_bits((char*)md, SHA256_DIGEST_LENGTH, zero, 8,
+      if (compare_bits((char*)md, rhash_len, zero, 8,
                        k) == 0)
         {
           gettimeofday(&time2, NULL);
@@ -1997,12 +2022,16 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
         }
     }
 
-  memcpy(solution, &ij[40], 8);
+  memcpy(solution, ij+ij_index, rhash_len);
   log_(NORM, "MD=");
-  print_hex(md, sizeof(md));
+  print_hex(md, rhash_len);
   log_(NORM, "\nIJ=");
-  print_hex(ij, sizeof(ij));
+  print_hex(ij, ij_size);
   log_(NORM, "\n");
+
+  free(ij);
+  free(ij_part1);
+  free(md);
 
   return(0);
 }
@@ -2017,12 +2046,12 @@ int solve_puzzle(hipcookie *cookie, __u64 *solution,
  *              solution = J, the puzzle solution given in I2
  *
  *  out:	Returns 0 if cookie is valid, -1 if invalid or error.
+ * TODO: fix so more than only SHA256 can be used.
  */
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
-                      hip_hit* hit_i, hip_hit* hit_r, __u64 solution)
+                      hip_hit* hit_i, hip_hit* hit_r, unsigned char *solution,
+                      size_t rhash_len)
 {
-  unsigned char md[SHA256_DIGEST_LENGTH];
-  unsigned char ij[48];
   __u8 k;
   SHA256_CTX c;
   const char zero[8] = { 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 };
@@ -2040,11 +2069,14 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
     }
 
   /* check that K, OPAQUE, I are equal */
-  if (cookie_r->i != cookie_i->i)
+  if (memcmp(cookie_r->i, cookie_i->i, rhash_len))
     {
       log_(NORM, "Puzzle and solution have different I's: ");
-      log_(NORM, "puzzle 0x%llx, solution 0x%llx\n",
-           cookie_r->i, cookie_i->i);
+      log_(NORM, "puzzle 0x");
+      print_hex(cookie_r->i, rhash_len);
+      log_(NORM, "solution 0x");
+      print_hex(cookie_i->i, rhash_len);
+      log_(NORM, "\n");
       return(-1);
     }
   else if (cookie_r->k != cookie_i->k)
@@ -2062,31 +2094,43 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
       return(-1);
     }
 
-  memcpy(&ij[0], &(cookie_r->i), 8);
+  unsigned char *md = (unsigned char *)malloc(rhash_len);
+  size_t ij_size = 2*rhash_len + 2*sizeof(hip_hit);
+  unsigned char *ij = (unsigned char *)malloc(ij_size);
+
+  int ij_index = 0;
+  memcpy(ij, cookie_r->i, rhash_len);
+  ij_index += rhash_len;
   /* Initiator's HIT*/
-  memcpy(&ij[8], hit_i, 16);
+  memcpy(ij+ij_index, hit_i, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
   /* Responder's HIT*/
-  memcpy(&ij[24], hit_r, 16);
-  memcpy(&ij[40], &solution, 8);
+  memcpy(ij+ij_index, hit_r, sizeof(hip_hit));
+  ij_index += sizeof(hip_hit);
+  memcpy(ij+ij_index, solution, rhash_len);
   k =  cookie_r->k;
   log_(NORM, "Verifying cookie to %u bits\n", k);
 
   SHA256_Init(&c);
-  SHA256_Update(&c, ij, 48);
+  SHA256_Update(&c, ij, ij_size);
   SHA256_Final(md, &c);
 
-  if (compare_bits((char *)md, SHA256_DIGEST_LENGTH, zero, 8, k) == 0)
+  if (compare_bits((char *)md, rhash_len, zero, 8, k) == 0)
     {
       log_(NORM, "Cookie verified ok.\n");
+      free(md);
+      free(ij);
       return(0);
     }
   else
     {
       log_(NORM, "ij given = ");
-      print_hex(ij, 48);
-      log_(NORM, " SHA256 = ");
-      print_hex(md, SHA256_DIGEST_LENGTH);
+      print_hex(ij, ij_size);
+      log_(NORM, " MD = ");
+      print_hex(md, rhash_len);
       log_(WARN, "Cookie did not pass verification.\n");
+      free(md);
+      free(ij);
       if (OPT.permissive)
         {
           return(0);
@@ -2096,7 +2140,8 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
           return(-1);
         }
     }
-
+  free(md);
+  free(ij);
   return(-1);
 }
 
@@ -3766,4 +3811,3 @@ void hex_print(register const char *indent,
     }
   (void)printf("\n");
 }
-
