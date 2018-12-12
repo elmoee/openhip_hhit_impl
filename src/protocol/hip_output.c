@@ -1279,8 +1279,21 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 
   switch (hip_a->hit_suite)
     {
-    // case HIT_SUITE_4BIT_ECDSA_LOW_SHA1: Not implemented
-    // case HIT_SUITE_4BIT_ECDSA_SHA384: Not implemented
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      HMAC(   EVP_sha1(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len(hip_a->hip_transform),
+              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
+              hmac_md, &hmac_md_len  );
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      HMAC(   EVP_sha384(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len(hip_a->hip_transform),
+              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
+              hmac_md, &hmac_md_len  );
+      break;
+    case HIT_SUITE_4BIT_RESERVED:
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
