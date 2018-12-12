@@ -207,7 +207,19 @@ void parse_xml_attributes(xmlAttrPtr attr, hi_node *hi)
         {
           sscanf(value, "%d", &tmp);
           hi->hit_suite_id = (char)tmp;
-          HCNF.hit_suite_list[0] = hi->hit_suite_id;
+
+          // Add the new suite to the next empty spot in the list.
+          for (int i = 0; i < HIT_SUITE_4BIT_MAX; ++i){
+            if (HCNF.hit_suite_list[i] == 0)
+            {
+              HCNF.hit_suite_list[i] = hi->hit_suite_id;
+              break;
+            }
+            if (HCNF.hit_suite_list[i] == hi->hit_suite_id)
+            {
+              break; // Do not add duplicate. 
+            }
+          }
         }
       else if (strcmp((char *)attr->name, "r1count") == 0)
         {
