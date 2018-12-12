@@ -226,9 +226,9 @@ int compute_keymat(hip_assoc *hip_a)
       location += HIT_SIZE;
     }
   /* I | J */
-  memcpy(&hashdata[location], &hip_a->cookie_r.i, sizeof(__u64));
+  memcpy(&hashdata[location], hip_a->cookie_r.i, sizeof(__u64));
   location += sizeof(__u64);
-  memcpy(&hashdata[location], &hip_a->cookie_j, sizeof(__u64));
+  memcpy(&hashdata[location], hip_a->cookie_j, sizeof(__u64));
   location += sizeof(__u64);
 
   /* 1 */

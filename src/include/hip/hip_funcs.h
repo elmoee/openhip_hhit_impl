@@ -3,17 +3,17 @@
 /*
  * Host Identity Protocol
  * Copyright (c) 2002-2012 the Boeing Company
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -107,7 +107,7 @@ int hip_send_I1(hip_hit* hit, hip_assoc *hip_a);
 int hip_send_R1(struct sockaddr *src, struct sockaddr *dst, hip_hit *hiti,
                 hi_node *hi, hip_assoc *hip_rvs);
 int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
-                    dh_cache_entry *dh_entry);
+                    dh_cache_entry *dh_entry, size_t rhash_len);
 int hip_send_I2(hip_assoc *hip_a);
 int hip_send_R2(hip_assoc *hip_a);
 int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
@@ -212,15 +212,16 @@ struct sockaddr *get_hip_dns_server();
 __u32 receive_hip_dns_response(unsigned char *buff, int len);
 int hits_equal(const hip_hit hit1, const hip_hit hit2);
 void hit_to_sockaddr (struct sockaddr *sockad, const hip_hit hit);
-void print_cookie(hipcookie *cookie);
+void print_cookie(hipcookie *cookie, size_t i_len);
 int str_to_addr(__u8 *data, struct sockaddr *addr);
 int hit_to_str(char *hit_str, const hip_hit hit);
 int addr_to_str(struct sockaddr *addr, __u8 *data, int len);
 int hex_to_bin(char *src, char *dst, int dst_len);
-int solve_puzzle(hipcookie *cookie, __u64 *solution,
-                 hip_hit *hit_i, hip_hit *hit_r);
+int solve_puzzle(hipcookie *cookie, unsigned char *solution,
+                 hip_hit *hit_i, hip_hit *hit_r, size_t rhash_len);
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
-                      hip_hit *hit_i, hip_hit *hit_r, __u64 solution);
+                      hip_hit *hit_i, hip_hit *hit_r, unsigned char *solution,
+                      size_t rhash_len);
 int hi_to_hit(hi_node *hi, hip_hit hit, int type);
 int validate_hit(hip_hit hit, hi_node *hi);
 void print_hex(const void *data, int len);
@@ -312,7 +313,7 @@ int add_other_addresses_to_hi(hi_node *hi, int mine);
 /* hip_cache.c */
 void init_all_R1_caches();
 void init_R1_cache(hi_node *hi, __u8 dh_group);
-hipcookie *generate_cookie();
+hipcookie *generate_cookie(size_t rhash_len);
 void replace_next_R1(__u8 dh_group);
 int compute_R1_cache_index(hip_hit *hiti, __u8 current);
 int calculate_r1_length(hi_node *hi, dh_cache_entry * dh_entry);
@@ -390,5 +391,3 @@ static __inline int gettimeofday(struct timeval *tv, void *tz)
 #endif /* __MACOSX__ */
 
 #endif
-
-
