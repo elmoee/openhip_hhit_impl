@@ -3933,7 +3933,7 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
 int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
                   __u8 *key, int type)
 {
-  log_(WARN, "validate hmac: %d \n", type);
+  log_(NORM, "validate hmac: %d \n", type);
   unsigned char hmac_md[EVP_MAX_MD_SIZE] = {0};
   unsigned int hmac_md_len = EVP_MAX_MD_SIZE;
   int key_len = auth_key_len_hit_suite(type);
@@ -3968,7 +3968,7 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
    */
   /* compare lower bits of received HMAC versus calculated HMAC
    * for MD5, this is the lower 128 bits; for SHA-1 it's 160-bits */
-  log_(WARN, "computed hmac: (%d) ", hmac_len);
+  log_(NORM, "computed hmac: (%d) ", hmac_len);
   if ((memcmp(&hmac[hmac_len - hmac_md_len], hmac_md,
               hmac_md_len) == 0))
   {
