@@ -409,8 +409,7 @@ int auth_key_len_hit_suite(int suite_id)
     case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       return(KEY_LEN_SHA1);
     default:
-    return(KEY_LEN_SHA256);
-      break;
+      return(KEY_LEN_SHA256);
   }
   return(0);
 }

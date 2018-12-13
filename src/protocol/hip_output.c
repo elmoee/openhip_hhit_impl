@@ -598,10 +598,8 @@ int hip_send_I2(hip_assoc *hip_a)
   enc->type = htons(PARAM_ENCRYPTED);
   memset(enc->reserved, 0, sizeof(enc->reserved));
   iv_len = enc_iv_len(hip_a->hip_cipher);
-  log_(WARN, "send i2 build tlv hostid len\n");
   /* inner padding is 8-byte aligned */
   data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
-  log_(WARN, "send i2 build tlv hostid len\n");
   /* AES has 128-bit IV/block size with which we need to align */
   if (iv_len > 8)
     {

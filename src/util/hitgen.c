@@ -163,7 +163,6 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
     case HI_ALG_ECDSA:
       {
       int success;
-      printf("ecdsa");
       unsigned int openssl_nid = ECDSA_curve_nid[opts->curve_id];
       ecdsa = EC_KEY_new_by_curve_name(openssl_nid);
       if(!ecdsa)
