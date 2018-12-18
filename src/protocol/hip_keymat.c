@@ -143,12 +143,34 @@ void compute_keys(hip_assoc *hip_a)
 }
 
 void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
+  SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  SHA512_CTX sha512_ctx;
 
-  SHA256_CTX c_256;
-
-  SHA256_Init(&c_256);
-  SHA256_Update(&c_256, hashdata, location);
-  SHA256_Final(hash, &c_256);
+  //Uses RHASH from the HIT-suite to decide hash function
+  switch (hip_a->hit_suite)
+    {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, hashdata, location);
+      SHA256_Final(hash, &sha256_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      SHA384_Init(&sha512_ctx);
+      SHA384_Update(&sha512_ctx, hashdata, location);
+      SHA384_Final(hash, &sha512_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&sha1_ctx);
+      SHA1_Update(&sha1_ctx, hashdata, location);
+      SHA1_Final(hash, &sha1_ctx);
+      break;
+    default:
+      // Default to SHA256 for backwards compatibility
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, hashdata, location);
+      SHA256_Final(hash, &sha256_ctx);
+    }
 }
 
 /*
@@ -160,7 +182,7 @@ int compute_keymat(hip_assoc *hip_a)
   int i, result;
   int location, len, dh_secret_len, hashdata_len;
   char *hashdata;
-  int sha_key_len = auth_key_len_hit_suite(hip_a->hit_suite);
+  int sha_key_len = auth_key_len_hit_suite(hip_a->hit_suite); //TODO: Verify that a fallback value (sha256) is actually desired
   unsigned char hash[sha_key_len], last_byte = 1;
   BIGNUM *hit1, *hit2;
   hip_hit *hitp;
@@ -387,7 +409,7 @@ int auth_key_len_hit_suite(int suite_id)
     case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
       return(KEY_LEN_SHA1);
     default:
-      break;
+      return(KEY_LEN_SHA256);
   }
   return(0);
 }

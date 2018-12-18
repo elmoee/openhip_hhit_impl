@@ -430,7 +430,7 @@ int hip_generate_R1(__u8 *data, hi_node *hi, hipcookie *cookie,
   /* hip_signature_2 - receiver's HIT and checksum zeroed */
   hiph->hdr_len = (location / 8) - 1;
 
-  location += build_tlv_signature(hi, data, location, TRUE);
+  location += build_tlv_signature(hi, data, location, TRUE, hi->hit_suite_id);
   hiph->hdr_len = (location / 8) - 1;
   /* insert the cookie OPAQUE parameter */
   memcpy(&data[cookie_location], cookie, sizeof(hipcookie)-
@@ -598,10 +598,8 @@ int hip_send_I2(hip_assoc *hip_a)
   enc->type = htons(PARAM_ENCRYPTED);
   memset(enc->reserved, 0, sizeof(enc->reserved));
   iv_len = enc_iv_len(hip_a->hip_cipher);
-
   /* inner padding is 8-byte aligned */
   data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
-
   /* AES has 128-bit IV/block size with which we need to align */
   if (iv_len > 8)
     {
@@ -699,7 +697,7 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* build the HIP SIG in a SIG RR */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   /* add any echo response (after signature) */
   if (hip_a->opaque && (hip_a->opaque->opaque_nosig))
@@ -805,7 +803,7 @@ int hip_send_R2(hip_assoc *hip_a)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -1156,7 +1154,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location += build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   /* Add a nonce in an echo request parameter when
    * doing address verification (after signature)
@@ -1302,8 +1300,21 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 
   switch (hip_a->hit_suite)
     {
-    // case HIT_SUITE_4BIT_ECDSA_LOW_SHA1: Not implemented
-    // case HIT_SUITE_4BIT_ECDSA_SHA384: Not implemented
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      HMAC(   EVP_sha1(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len(hip_a->hip_transform),
+              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
+              hmac_md, &hmac_md_len  );
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      HMAC(   EVP_sha384(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len(hip_a->hip_transform),
+              (__u8 *)&ticket->hmac_key_index, length_to_hmac,
+              hmac_md, &hmac_md_len  );
+      break;
+    case HIT_SUITE_4BIT_RESERVED:
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
@@ -1331,7 +1342,7 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_signature(hip_mr->hi, buff, location, FALSE);
+  location += build_tlv_signature(hip_mr->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -1401,7 +1412,7 @@ int hip_send_update_locators(hip_assoc *hip_a)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location += build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   src = HIPA_SRC(hip_a);
   dst = HIPA_DST(hip_a);
@@ -1513,7 +1524,7 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -1606,7 +1617,7 @@ int hip_send_notify(hip_assoc *hip_a, int code, __u8 *data, int data_len)
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
-  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE);
+  location +=  build_tlv_signature(hip_a->hi, buff, location, FALSE, hip_a->hit_suite);
 
   hiph->hdr_len = (location / 8) - 1;
   hiph->checksum = 0;
@@ -2007,7 +2018,8 @@ int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites)
 
   for (i = 0; (i < HIT_SUITE_4BIT_MAX) && (hit_suites[i] > 0); i++, len++)
   {
-    *hit_suite_id = hit_suites[i];
+    // Convert from 4bit to 8 bit.
+    *hit_suite_id = (hit_suites[i] << 4);
     hit_suite_id++;
   }
 
@@ -2068,7 +2080,6 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
 {
   int hi_len = 0;
-
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:            /*       tlv + T + Q + P,G,Y */
@@ -2092,6 +2103,15 @@ int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
           hi_len += 2;
         }
       break;
+    case HI_ALG_ECDSA:          /*        tlv + curve_len + public_key_len */
+      if (!hi->ecdsa)
+        {
+          log_(WARN, "No ECDSA context when building length!\n");
+          return(0);
+        }
+        hi_len = sizeof(tlv_host_id) + 2 + HIP_ECDSA384_SIG_SIZE; // TODO: 33 if compressed
+      break;
+
     default:
       break;
     }
@@ -2166,6 +2186,26 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
       /* public modulus */
       len += bn2bin_safe(hi->rsa->n, &data[len], RSA_size(hi->rsa));
       break;
+    case HI_ALG_ECDSA:
+      {
+      BN_CTX * bn_ctx = BN_CTX_new();
+      const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
+      const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
+      int curv_name = EC_GROUP_get_curve_name(ec_group);
+      __u16 *p =  (__u16*) &data[len];
+      *p = htons(curv_name);
+      len += 2;
+      size_t pk_size =  EC_POINT_point2oct(ec_group, ec_point,
+                                                       POINT_CONVERSION_UNCOMPRESSED,
+                                                       NULL, 0, bn_ctx);
+      
+      len += EC_POINT_point2oct(ec_group, ec_point,
+                                               POINT_CONVERSION_UNCOMPRESSED,
+                                               &data[len], pk_size,
+                                               bn_ctx);
+      BN_CTX_free(bn_ctx); 
+      break;
+      }
     default:
       break;
     }
@@ -2298,12 +2338,15 @@ int build_tlv_cert(__u8 *buff)
   return(0);
 }
 
-int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
+int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
 {
   /* HIP sig */
-  SHA256_CTX c;
-  unsigned char md[SHA256_DIGEST_LENGTH] = {0};
+  SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  SHA512_CTX sha512_ctx;
+  unsigned char md[SHA512_DIGEST_LENGTH] = {0};
   DSA_SIG *dsa_sig;
+  ECDSA_SIG *ecdsa_sig;
   tlv_hip_sig *sig;
   unsigned int sig_len = 0;
   int err;
@@ -2320,9 +2363,29 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
     }
 
   /* calculate SHA1 hash of the HIP message */
-  SHA256_Init(&c);
-  SHA256_Update(&c, data, location);
-  SHA256_Final(md, &c);
+  switch (type)
+    {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, location);
+      SHA256_Final(md, &sha256_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      SHA384_Init(&sha512_ctx);
+      SHA384_Update(&sha512_ctx, data, location);
+      SHA384_Final(md, &sha512_ctx);
+      break;
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&sha1_ctx);
+      SHA1_Update(&sha1_ctx, data, location);
+      SHA1_Final(md, &sha1_ctx);
+      break;
+    default:
+      // Default to SHA256 for backwards compatibility
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, location);
+      SHA256_Final(md, &sha256_ctx);
+    }
 
   /* build tlv header */
   sig = (tlv_hip_sig*) &data[location];
@@ -2360,6 +2423,24 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1)
           log_(WARN, "RSA_sign() error: %s",
                ERR_error_string(ERR_get_error(), NULL));
         }
+      break;
+    case HI_ALG_ECDSA: /* RFC 4754 */
+      {
+        int curve_name = ECDSA_get_curve_id(hi->ecdsa);
+        if (curve_name == -1) {
+          log_(WARN, "Curve not implemented.\n");
+          return -1;
+        }
+        int curve_param_size = ECDSA_curve_PARAM_SIZE[curve_name];
+        memset(sig->signature, 0, curve_param_size*2);
+        ecdsa_sig = ECDSA_do_sign(md, curve_param_size, hi->ecdsa);
+
+        bn2bin_safe(ecdsa_sig->r, &sig->signature[0], curve_param_size);
+        bn2bin_safe(ecdsa_sig->s, &sig->signature[curve_param_size], curve_param_size);
+
+        ECDSA_SIG_free(ecdsa_sig);
+        sig_len = 2 * curve_param_size; 
+      }
       break;
     default:
       break;
@@ -2399,8 +2480,21 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
 
   switch (hip_a->hit_suite)
     {
-    //  case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:  Not implemented
-    //  case HIT_SUITE_4BIT_ECDSA_SHA384: Not implemented
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      HMAC (  EVP_sha1(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len_hit_suite(hip_a->hit_suite),
+              data, location,
+              hmac_md, &hmac_md_len  );
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      HMAC(   EVP_sha384(),
+              get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len_hit_suite(hip_a->hit_suite),
+              data, location,
+              hmac_md, &hmac_md_len  );
+      break;
+    case HIT_SUITE_4BIT_RESERVED:
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
       HMAC(   EVP_sha256(),
               get_key(hip_a, HIP_INTEGRITY, FALSE),
@@ -2421,7 +2515,7 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
   hmac->type = htons((__u16)type);
   hmac->length = htons(sizeof(tlv_hmac) - 4);
   log_(NORM, "HMAC length=%d\n", sizeof(tlv_hmac));
-
+  log_(WARN, "HMAC_md_len=%d, hmacsize=%d \n", hmac_md_len, sizeof(hmac->hmac));
   /* get lower 160-bits of HMAC computation */
   memcpy( hmac->hmac,
           &hmac_md[hmac_md_len - sizeof(hmac->hmac)],

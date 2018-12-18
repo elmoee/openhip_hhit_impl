@@ -396,6 +396,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
   int offset = 0, key_len = 0;
   char t;
   __u16 e_len = 0;
+  __u16 curve = 0;
   hi_node *hi;
 
   /* for DSA:			for RSA:
@@ -470,6 +471,20 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
             }
         }
       break;
+    case HI_ALG_ECDSA:
+      {
+        __u16* p = (__u16*) &data[0];
+        curve = *p;
+        curve = ntohs(curve);
+        key_len = hi_length - 2;
+        // TODO: define constants 65 and 33 uncompressed and compressed
+        if (key_len != 97 && key_len != 49 && key_len != 65 && key_len != 33)
+          {
+            log_(WARN, "ECDSA invalid public key length %d \n", key_len);
+            return(-1);
+          }
+        break;
+      }    
     default:
       log_(WARN, "Invalid HI type in RDATA: %u\n", alg);
       if (!OPT.permissive)
@@ -499,9 +514,14 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       log_(WARN, "Parsing HI and RSA already exists.\n");
       return(-1);
     }
+  else if ((alg == HI_ALG_ECDSA) && hi->ecdsa)
+    {
+      log_(WARN, "Parsing HI and ECDSA already exists.\n");
+      return(-1);
+    }
+
   hi->algorithm_id = alg;
   hi->size = key_len;
-
   /* read algorithm-specific key data */
   switch (alg)
     {
@@ -531,6 +551,22 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       hi->rsa->n = BN_bin2bn(&data[offset], key_len, 0);
 #ifndef HIP_VPLS
       log_(NORM, "Found RSA HI with public modulus: 0x");
+      print_hex((char *)&data[offset], key_len);
+      log_(NORM, "\n");
+#endif
+      offset += key_len;
+      break;
+    case HI_ALG_ECDSA:
+      offset = 2;
+      hi->ecdsa = EC_KEY_new_by_curve_name(curve);
+      const EC_GROUP* group = EC_GROUP_new_by_curve_name(curve);
+      EC_POINT* pub = EC_POINT_new(group);
+      BN_CTX* ctx = BN_CTX_new();
+      EC_POINT_oct2point(group, pub, &data[offset], key_len, ctx);
+      EC_KEY_set_public_key(hi->ecdsa, pub);
+      BN_CTX_free(ctx);
+#ifndef HIP_VPLS
+      log_(NORM, "Found ECDSA HI with public key: 0x");
       print_hex((char *)&data[offset], key_len);
       log_(NORM, "\n");
 #endif
@@ -884,6 +920,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->hi->size         = my_host_id->size;
   hip_a->hi->dsa          = my_host_id->dsa;
   hip_a->hi->rsa          = my_host_id->rsa;
+  hip_a->hi->ecdsa        = my_host_id->ecdsa;
   hip_a->hi->r1_gen_count = my_host_id->r1_gen_count;
   hip_a->hi->update_id    = my_host_id->update_id;
   hip_a->hi->algorithm_id = my_host_id->algorithm_id;
@@ -2243,6 +2280,26 @@ int khi_hi_input(hi_node *hi, __u8 *out)
       location += bn2bin_safe(hi->rsa->n, &out[location],
                               RSA_size(hi->rsa));
       break;
+    case HI_ALG_ECDSA:
+      // Add curve id to the first to bytes of out, then add public key to the rest of out.
+      location = 0;
+      BN_CTX * bn_ctx = BN_CTX_new();
+      const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
+      const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
+      int curve_name = EC_GROUP_get_curve_name(ec_group);
+      __u16 *p =  (__u16*) &out[location];
+      *p = htons(curve_name);
+      location += 2;
+      size_t public_key_hex_size =  EC_POINT_point2oct(ec_group, ec_point,
+                                                       POINT_CONVERSION_UNCOMPRESSED,
+                                                       NULL, 0, bn_ctx);
+      
+      EC_POINT_point2oct(ec_group, ec_point,
+                         POINT_CONVERSION_UNCOMPRESSED,
+                         &out[location], public_key_hex_size,
+                         bn_ctx);
+      BN_CTX_free(bn_ctx); 
+      break;
     default:
       return(-1);
     }
@@ -2257,15 +2314,21 @@ int khi_hi_input(hi_node *hi, __u8 *out)
  *
  * out:		Returns 0 if successful, -1 on error.
  *
- * Converts the Host Identity to a Type 1 SHA-256 HIT.
+ * Converts the Host Identity to a 
+ * Type 1 SHA-256 HIT.
+ * Type 2 SHA-384 HIT
+ * Type 3 SHA-1 HIT
  *
  */
-int hi_to_hit(hi_node *hi, hip_hit hit)
+int hi_to_hit(hi_node *hi, hip_hit hit, int type)
 {
-  int len;
+  printf("Running hi_to_hit with hit: %s with type = %d", hit, type);
+  int len, hash_len;
   __u8 *data = NULL;
-  SHA256_CTX ctx;
-  unsigned char hash[SHA256_DIGEST_LENGTH];
+  SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  SHA512_CTX sha512_ctx;
+  unsigned char hash[SHA512_DIGEST_LENGTH];
   __u32 prefix;
 
   if (!hi)
@@ -2273,7 +2336,6 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
       log_(WARN, "hi_to_hit(): NULL hi\n");
       return(-1);
     }
-
 
   /* calculate lengths and validate HIs */
   switch (hi->algorithm_id)
@@ -2303,6 +2365,22 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
           len++;
         }
       break;
+    case HI_ALG_ECDSA:     /* RFC 4754 */
+      if (!hi->ecdsa)
+        {
+          log_(WARN, "hi_to_hit(): NULL ecdsa\n");
+          return(-1);
+        }
+      len = sizeof(khi_context_id);
+      len += 2;  // Two bytes for the curv_name
+      // Get key length and add to len
+      const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
+      const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
+      len +=  EC_POINT_point2oct(ec_group, ec_point,
+                                 POINT_CONVERSION_UNCOMPRESSED,
+                                 NULL, 0, 0);
+
+      break;
     default:
       log_(WARN, "hi_to_hit(): invalid algorithm (%d)\n",
            hi->algorithm_id);
@@ -2322,15 +2400,39 @@ int hi_to_hit(hi_node *hi, hip_hit hit)
   memcpy(&data[0], khi_context_id, sizeof(khi_context_id));
   khi_hi_input(hi, &data[sizeof(khi_context_id)]);
   /* Compute the hash */
-  SHA256_Init(&ctx);
-  SHA256_Update(&ctx, data, len);
-  SHA256_Final(hash, &ctx);
+  switch (type)
+    {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, len);
+      SHA256_Final(hash, &sha256_ctx);
+      hash_len = SHA256_DIGEST_LENGTH;
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      SHA384_Init(&sha512_ctx);
+      SHA384_Update(&sha512_ctx, data, len);
+      SHA384_Final(hash, &sha512_ctx);
+      hash_len = SHA384_DIGEST_LENGTH;
+      break;
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&sha1_ctx);
+      SHA1_Update(&sha1_ctx, data, len);
+      SHA1_Final(hash, &sha1_ctx);
+      hash_len = SHA_DIGEST_LENGTH;
+      break;
+    default:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, len);
+      SHA256_Final(hash, &sha256_ctx);
+      hash_len = SHA256_DIGEST_LENGTH;
+    }
+
 
   /* KHI = Prefix | OGA ID | Encode_n( Hash)
    */
   prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
-  khi_encode_n(hash, SHA256_DIGEST_LENGTH, &hit[4], 96 );
+  khi_encode_n(hash, hash_len, &hit[4], 96 );
   /* lower 96 bits of HIT */
   hit[3] |= (0x0F & hi->hit_suite_id); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
   free(data);
@@ -2354,7 +2456,7 @@ int validate_hit(hip_hit hit, hi_node *hi)
       return(FALSE);
     }
 
-  if (hi_to_hit(hi, computed_hit) < 0)
+  if (hi_to_hit(hi, computed_hit, hi->hit_suite_id) < 0)
     {
       return(FALSE);
     }
@@ -3357,6 +3459,21 @@ void logbn(BIGNUM *bn)
   bp = BIO_new_fp(fp, BIO_NOCLOSE);
   BN_print(bp, bn);
   BIO_free(bp);
+}
+
+
+/*
+ * Return the id for the ECDSA-type,
+ * return -1 if not found.
+ */
+int ECDSA_get_curve_id(const EC_KEY * ecdsa){
+  int curve_name = EC_GROUP_get_curve_name(
+                    EC_KEY_get0_group(ecdsa)
+                   );
+  for (int i = 0; i < ECDSA_MAX; ++i){
+    if (ECDSA_curve_nid[i] == curve_name) return i;
+  }
+  return -1;
 }
 
 /*

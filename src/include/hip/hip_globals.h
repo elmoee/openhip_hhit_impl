@@ -56,6 +56,11 @@ extern hi_node *peer_hi_head;
 /* Linked list of Diffie-Hellman contexts */
 extern dh_cache_entry *dh_cache;
 
+/* ECDSA constants */
+extern const unsigned int ECDSA_curve_nid[ECDSA_MAX];
+extern const unsigned int ECDSA_curve_PARAM_SIZE[ECDSA_MAX];
+extern const unsigned int ECDSA_low_curve_nid[2];
+
 /* Diffie-Hellman constants */
 extern const unsigned char *dhprime[DH_MAX];
 extern const int dhprime_len[DH_MAX]; /* only used by new_dh_cache_entry()

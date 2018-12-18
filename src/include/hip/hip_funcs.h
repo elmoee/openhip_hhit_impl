@@ -124,7 +124,7 @@ int hip_retransmit(hip_assoc *hip_a, __u8 *data, int len, struct sockaddr *src,
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name);
 int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name);
 int build_spi_locator(__u8 *data, __u32 spi, struct sockaddr *addr);
-int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1);
+int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type);
 int build_rekey(hip_assoc *hip_a);
 
 /* hip_input.c */
@@ -144,7 +144,7 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild);
 int hip_handle_BOS(__u8 *data, struct sockaddr *src);
 int hip_handle_CER(__u8 *data, hip_assoc *hip_a);
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
-                       DSA *dsa, RSA *rsa);
+                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa, int type);
 int handle_hi(hi_node **hi_p, const __u8 *data);
 int complete_base_exchange(hip_assoc *hip_a);
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,
@@ -222,7 +222,7 @@ int solve_puzzle(hipcookie *cookie, unsigned char *solution,
 int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit *hit_i, hip_hit *hit_r, unsigned char *solution,
                       size_t rhash_len);
-int hi_to_hit(hi_node *hi, hip_hit hit);
+int hi_to_hit(hi_node *hi, hip_hit hit, int type);
 int validate_hit(hip_hit hit, hi_node *hi);
 void print_hex(const void *data, int len);
 void print_binary(void *data, int len);
@@ -233,6 +233,7 @@ int compare_hits2(void const *s1, void const *s2);
 int maxof(int num_args, ...);
 int hip_header_offset(const __u8 *data);
 int udp_header_offset(const __u8 *data);
+int ECDSA_get_curve_id(const EC_KEY * ecdsa);
 __u16 checksum_udp_packet(__u8 *data,
                           struct sockaddr *src,
                           struct sockaddr *dst);

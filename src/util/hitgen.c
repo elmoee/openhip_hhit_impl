@@ -39,6 +39,7 @@
 #include <openssl/dsa.h>
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
+#include <openssl/obj_mac.h>
 #include <libxml/encoding.h>
 #include <libxml/xmlIO.h>
 #include <libxml/tree.h>
@@ -88,6 +89,7 @@ typedef struct _hi_options {
   char hit_suite_id;
   __u64 r1count;
   char *name;
+  int curve_id; // If type is ECDSA or ECDSA_low, this sets it curve id.
 } hi_options;
 
 extern struct hip_opt OPT;
@@ -107,9 +109,12 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   BIO *bp;
   DSA *dsa = NULL;
   RSA *rsa = NULL;
-
+  EC_KEY* ecdsa = NULL;
   printf("Generating a %d-bit %s key\n",
          opts->bitsize, HI_TYPESTR(opts->type));
+
+  
+  
   if (opts->bitsize < 512)
     {
       printf("Error: bit size too small. ");
@@ -155,6 +160,26 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
           exit(1);
         }
       break;
+    case HI_ALG_ECDSA:
+      {
+      int success;
+      unsigned int openssl_nid = ECDSA_curve_nid[opts->curve_id];
+      ecdsa = EC_KEY_new_by_curve_name(openssl_nid);
+      if(!ecdsa)
+        {
+          fprintf(stderr, "EC_KEY_new_by_curve_name() failed.\n");
+          exit(1);
+        }
+      printf("Generating ECDSA keys for HI...\n");
+      success = EC_KEY_generate_key(ecdsa);
+
+      if (!success)
+        {
+          fprintf(stderr, "ECDSA_generate_key() failed.\n");
+          exit(1);
+        }
+      break;
+      }
     default:
       printf("Error: generate_HI() got invalid HI type\n");
       exit(1);
@@ -205,10 +230,32 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
       xmlNewChild(hi, NULL, BAD_CAST "iqmp",
                   BAD_CAST BN_bn2hex(rsa->iqmp));
       break;
+    case HI_ALG_ECDSA: 
+      sprintf(
+        tmp, "%u",
+        (unsigned int) opts->curve_id
+      ); // Write curve id to config file.
+      xmlNewChild(hi, NULL, BAD_CAST "CURVE", BAD_CAST tmp);
+      xmlNewChild(
+        hi, 
+        NULL, 
+        BAD_CAST "PRIV", 
+        BAD_CAST BN_bn2hex(EC_KEY_get0_private_key(ecdsa))
+      );
+      xmlNewChild(
+        hi, 
+        NULL, 
+        BAD_CAST "PUB", 
+        BAD_CAST EC_POINT_point2hex(
+                    EC_KEY_get0_group(ecdsa),
+                    EC_KEY_get0_public_key(ecdsa),
+                    POINT_CONVERSION_UNCOMPRESSED,
+                    0)
+      );
+      break;
     default:
       break;
     }
-
   /*
    * calculate and store the HIT
    */
@@ -221,10 +268,11 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   hostid.hit_suite_id = opts->hit_suite_id;
   hostid.rsa = rsa;
   hostid.dsa = dsa;
+  hostid.ecdsa = ecdsa;
 
   hit.ss_family = AF_INET6;
   hitp = SA2IP(&hit);
-  if (hi_to_hit(&hostid, hitp) < 0)
+  if (hi_to_hit(&hostid, hitp, hostid.hit_suite_id) < 0)
     {
       printf("Error generating HIT!\n");
       exit(1);
@@ -493,7 +541,9 @@ void print_hitgen_usage()
   printf(" -file <file> \t write output to the specified file\n");
   printf(" -append\t append identity if file already exists\n");
   printf("Host identitiy generation:\n");
-  printf(" -type \tfollowed by \"DSA\" or \"RSA\" specifies key type\n");
+  printf(" -type \t\t followed by \"DSA\", \"RSA\" or \"ECDSA\" specifying the key type\n");
+  printf(" -curve \t\t followed by id for the ECDSA curve to be used. Default 1\n");
+  printf(" -suite \t\t followed by id for the suite to be used. Default 0\n");
   printf(" -bits \t\t specifies the length in bits for (P,G,Y)\n");
   printf(" -length \t specifies the length in bytes for (P,G,Y)\n");
   printf(" -anon \t\t sets the anonymous flag for this HI\n");
@@ -576,11 +626,12 @@ int main(int argc, char *argv[])
   str_to_addr((__u8*)"1.0.0.0", SA(&HCNF.lsi_prefix));
 
   opts.type = 0;
+  opts.curve_id = 1;
   opts.bitsize = 0;
   opts.anon = 0;
   opts.incoming = 1;
   opts.r1count = 10;
-  opts.hit_suite_id = 1;
+  opts.hit_suite_id = 0;
   opts.name = name;
 
   /*
@@ -613,10 +664,30 @@ int main(int argc, char *argv[])
             {
               opts.type = HI_ALG_RSA;
             }
+          else if (strcmp(*argv, "ECDSA") == 0)
+            {
+              opts.type = HI_ALG_ECDSA;
+            }
           else
             {
               printf("Invalid HI type.\n");
             }
+          argv++, argc--;
+          continue;
+        }
+      else if (strcmp(*argv, "-curve") == 0)
+        {
+          argv++, argc--;
+          sscanf(*argv, "%d", &opts.curve_id);
+          argv++, argc--;
+          continue;
+        }
+        else if (strcmp(*argv, "-suite") == 0)
+        {
+          argv++, argc--;
+          int tmp; 
+          sscanf(*argv, "%d", &tmp);
+          opts.hit_suite_id = tmp;
           argv++, argc--;
           continue;
         }

@@ -212,10 +212,14 @@ typedef enum {
   HI_ALG_RESERVED,
   HI_ALG_DSA = 3,
   HI_ALG_RSA = 5,
+  HI_ALG_ECDSA = 7,
+  HI_ALG_ECDSA_LOW = 9,
 } HI_ALGORITHMS;
 #define HIP_RSA_DFT_EXP RSA_F4 /* 0x10001L = 65537; 3 and 17 are also common */
 #define HI_TYPESTR(a)  ((a == HI_ALG_DSA) ? "DSA" : \
-                        (a == HI_ALG_RSA) ? "RSA" : "UNKNOWN")
+                        (a == HI_ALG_RSA) ? "RSA" : \
+                        (a == HI_ALG_ECDSA) ? "ECDSA" : \
+                        (a == HI_ALG_ECDSA_LOW) ? "ECDSA_LOW" : "UNKNOWN")
 
 /* SADB algorithms */
 #define SADB_EALG_3DESCBC         3
@@ -286,6 +290,15 @@ typedef enum {
   DH_MODP_2048,
   DH_MAX
 } DH_GROUP_IDS;
+
+/* ECDSA curve IDs*/
+typedef enum {
+  ECDSA_RESERVED,
+  ECDSA_256,
+  ECDSA_384,
+  ECDSA_MAX
+} ECDSA_CURVE_IDS;
+
 /* choose default DH group here */
 #define DEFAULT_DH_GROUP_ID  DH_MODP_1536
 

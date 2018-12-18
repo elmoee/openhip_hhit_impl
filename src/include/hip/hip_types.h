@@ -57,6 +57,7 @@
 #include <openssl/bn.h>
 #include <openssl/hmac.h>
 #include <openssl/rsa.h>
+#include <openssl/ecdsa.h>
 #include <time.h>
 
 #include <hip/hip_proto.h>
@@ -107,6 +108,12 @@
 #define DSA_PRIV 20 /* Size in bytes of DSA private key and Q value */
 #define HIP_KEY_SIZE 48 /* Must be large enough to hold largest possible key */
 #define HIP_DSA_SIG_SIZE 41 /* T(1) + R(20) + S(20)  from RFC 2536 */
+#define HIP_ECDSA256_SIG_SIZE 65
+#define HIP_ECDSA256_SIG_PARAM_SIZE (HIP_ECDSA256_SIG_SIZE - 1) / 2
+#define HIP_ECDSA384_SIG_SIZE 97
+#define HIP_ECDSA384_SIG_PARAM_SIZE (HIP_ECDSA384_SIG_SIZE - 1) / 2
+#define HIP_ECDSA_LOW_SIG_SIZE 21
+#define HIP_ECDSA_LOW_SIG_PARAM_SIZE (HIP_ECDSA_LOW_SIG_SIZE - 1) / 2
 #define MAX_SIG_SIZE 512 /* RFC 3110 4096-bits max RSA length */
 #define NUMKEYS 8 /* HIP, HMAC, HIP, HMAC, ESP, AUTH, ESP, AUTH */
 #define KEYMAT_SIZE (4 * NUMKEYS * HIP_KEY_SIZE) /* 768 bytes, enough space for
@@ -481,6 +488,8 @@ typedef struct _hi_node {
   int size;                     /* Size in bytes of the Host Identity	*/
   DSA *dsa;                     /* HI in DSA format			*/
   RSA *rsa;                     /* HI in RSA format			*/
+  EC_KEY *ecdsa;                /* HI in ECDSA format			*/
+  EC_KEY *ecdsa_low;            /* HI in ECDSA_LOW format			*/
   struct _r1_cache_entry r1_cache [DH_MAX][R1_CACHE_SIZE];       /* the R1 cache	*/
   __u64 r1_gen_count;           /* R1 generation counter		*/
   __u32 update_id;              /* this host's Update ID		*/

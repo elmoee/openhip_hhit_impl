@@ -207,6 +207,19 @@ void parse_xml_attributes(xmlAttrPtr attr, hi_node *hi)
         {
           sscanf(value, "%d", &tmp);
           hi->hit_suite_id = (char)tmp;
+
+          // Add the new suite to the next empty spot in the list.
+          for (int i = 0; i < HIT_SUITE_4BIT_MAX; ++i){
+            if (HCNF.hit_suite_list[i] == 0)
+            {
+              HCNF.hit_suite_list[i] = hi->hit_suite_id;
+              break;
+            }
+            if (HCNF.hit_suite_list[i] == hi->hit_suite_id)
+            {
+              break; // Do not add duplicate. 
+            }
+          }
         }
       else if (strcmp((char *)attr->name, "r1count") == 0)
         {
@@ -306,7 +319,38 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
             {
               BN_hex2bn(&hi->rsa->iqmp, data);
             }
-          break;
+            break;
+          case HI_ALG_ECDSA:
+            if (strcmp((char *)node->name, "CURVE") == 0)
+              {
+                unsigned int curve;
+                sscanf(data, "%u", &curve);
+                if(curve > ECDSA_MAX)
+                  {
+                    log_(WARN, "Curve id %u invalid", curve);
+                    continue;
+                  }
+                curve = ECDSA_curve_nid[curve];
+                EC_KEY_set_group(hi->ecdsa, EC_GROUP_new_by_curve_name(curve));
+              }
+            if (strcmp((char *)node->name, "PUB") == 0)
+              {
+                EC_POINT* pub = EC_POINT_new(EC_KEY_get0_group(hi->ecdsa));
+                EC_POINT_hex2point(
+                    EC_KEY_get0_group(hi->ecdsa),
+                    data,
+                    pub,
+                    BN_CTX_new()
+                );
+                EC_KEY_set_public_key(hi->ecdsa, pub);
+              }
+            else if (strcmp((char *)node->name, "PRIV") == 0)
+              {
+                BIGNUM* priv = BN_new();
+                BN_hex2bn(&priv, data);
+                EC_KEY_set_private_key(hi->ecdsa, priv);
+              }
+            break;
         default:
           break;
         }
@@ -548,12 +592,15 @@ int read_identities_file(char *filename, int mine)
             case HI_ALG_RSA:
               hi->rsa = RSA_new();
               break;
+            case HI_ALG_ECDSA:
+              hi->ecdsa = EC_KEY_new();
+              break;
             default:
               if (mine)
                 {
                   log_(WARN, "Unknown algorithm found ");
                   log_(WARN, "in XML file for %s: %u\n",
-                       hi->name, hi->algorithm_id);
+                       (char *)node->name, hi->algorithm_id);
                   free_hi_node(hi);
                   continue;
                 }
@@ -714,7 +761,7 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
  *
  * Helper to add big number hex string as a child of the given XML node.
  */
-void xmlNewChild_from_bn(xmlNodePtr node, BIGNUM *bn, char *name)
+void xmlNewChild_from_bn(xmlNodePtr node, const BIGNUM *bn, char *name)
 {
   char *cp = BN_bn2hex(bn);
   xmlNewChild(node, NULL, BAD_CAST name, BAD_CAST cp);
@@ -807,6 +854,20 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
           xmlNewChild_from_bn(hi, h->rsa->dmp1, "dmp1");
           xmlNewChild_from_bn(hi, h->rsa->dmq1, "dmq1");
           xmlNewChild_from_bn(hi, h->rsa->iqmp, "iqmp");
+        case HI_ALG_ECDSA:
+          xmlNewChild(hi, NULL, BAD_CAST "CURVE", BAD_CAST tmp);
+          xmlNewChild_from_bn(hi, EC_KEY_get0_private_key(h->ecdsa), "PRIV");
+          xmlNewChild(
+            hi, 
+            NULL, 
+            BAD_CAST "PUB", 
+            BAD_CAST EC_POINT_point2hex(
+                        EC_KEY_get0_group(h->ecdsa),
+                        EC_KEY_get0_public_key(h->ecdsa),
+                        POINT_CONVERSION_UNCOMPRESSED,
+                        BN_CTX_new())
+          );
+          break;
         default:
           break;
         }
