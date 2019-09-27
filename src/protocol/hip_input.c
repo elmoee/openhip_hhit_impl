@@ -3785,8 +3785,10 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
   SHA256_CTX sha256_ctx;
   SHA512_CTX sha512_ctx;
   unsigned char md[SHA512_DIGEST_LENGTH];
-  DSA_SIG dsa_sig;
-  ECDSA_SIG ecdsa_sig;
+  DSA_SIG *dsa_sig;
+  dsa_sig = DSA_SIG_new();
+  ECDSA_SIG *ecdsa_sig;
+  ecdsa_sig = ECDSA_SIG_new();
   int length, sig_len;
   tlv_hip_sig *sig = (tlv_hip_sig*)tlv;
   __u8 alg;
@@ -3886,17 +3888,18 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
   log_(NORM, "SHA1: ");
   print_hex(md, SHA256_DIGEST_LENGTH);
   log_(NORM, "\n");
-
+  BIGNUM *dsa_sig_r, *dsa_sig_s;
+  BIGNUM *ecdsa_sig_r, *ecdsa_sig_s;
   switch (alg)
     {
     case HI_ALG_DSA:
       /* build the DSA structure */
-      dsa_sig.r = BN_bin2bn(&sig->signature[1], 20, NULL);
-      dsa_sig.s = BN_bin2bn(&sig->signature[21], 20, NULL);
+      dsa_sig_r = BN_bin2bn(&sig->signature[1], 20, NULL);
+      dsa_sig_s = BN_bin2bn(&sig->signature[21], 20, NULL);
       /* verify the DSA signature */
-      err = DSA_do_verify(md, SHA256_DIGEST_LENGTH, &dsa_sig, dsa);
-      BN_free(dsa_sig.r);
-      BN_free(dsa_sig.s);
+      err = DSA_do_verify(md, SHA256_DIGEST_LENGTH, dsa_sig, dsa);
+      BN_free(dsa_sig_r);
+      BN_free(dsa_sig_s);
       break;
     case HI_ALG_RSA:
       /* verify the RSA signature */
@@ -3911,12 +3914,12 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
           return -1;
         }
         int curve_param_size = ECDSA_curve_PARAM_SIZE[curve_name];
-        ecdsa_sig.r = BN_bin2bn(&sig->signature[0], curve_param_size, NULL);
-        ecdsa_sig.s = BN_bin2bn(&sig->signature[curve_param_size], curve_param_size, NULL);
-
-        err = ECDSA_do_verify(md, curve_param_size, &ecdsa_sig, ecdsa);
-        BN_free(ecdsa_sig.r);
-        BN_free(ecdsa_sig.s);
+        ecdsa_sig_r = BN_bin2bn(&sig->signature[0], curve_param_size, NULL);
+        ecdsa_sig_s = BN_bin2bn(&sig->signature[curve_param_size], curve_param_size, NULL);
+        ECDSA_SIG_set0(ecdsa_sig,ecdsa_sig_r,ecdsa_sig_s);
+        err = ECDSA_do_verify(md, curve_param_size, ecdsa_sig, ecdsa);
+        BN_free(ecdsa_sig_r);
+        BN_free(ecdsa_sig_s);
       }
       break;
     default:
@@ -4221,7 +4224,7 @@ int handle_dh(hip_assoc *hip_a, const __u8 *data, __u8 *g, EVP_PKEY *evp_dh)
     }
 
     hip_a->peer_dh = d2i_PUBKEY(NULL, (const unsigned char**)&pub_key, len);
-    log_(NORM, "EVP_PKEY type: %d", hip_a->peer_dh->type);
+    log_(NORM, "EVP_PKEY type: %d", EVP_PKEY_base_id(hip_a->peer_dh));
   }
   else
   {

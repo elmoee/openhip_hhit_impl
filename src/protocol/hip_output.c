@@ -2080,6 +2080,7 @@ int build_tlv_transform(__u8 *data, int type, __u16 *transforms, __u16 single)
 int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
 {
   int hi_len = 0;
+  const BIGNUM *rsa_e;
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:            /*       tlv + T + Q + P,G,Y */
@@ -2096,9 +2097,10 @@ int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
           log_(WARN, "No RSA context when building length!\n");
           return(0);
         }
-      hi_len = sizeof(tlv_host_id) + 1 + BN_num_bytes(hi->rsa->e)
+      RSA_get0_key(hi->rsa,NULL, &rsa_e, NULL);
+      hi_len = sizeof(tlv_host_id) + 1 + BN_num_bytes(rsa_e)
                + RSA_size(hi->rsa);
-      if (BN_num_bytes(hi->rsa->e) > 255)
+      if (BN_num_bytes(rsa_e) > 255)
         {
           hi_len += 2;
         }
@@ -2153,19 +2155,23 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
   hi_hdr = htonl(0x0202ff00 | hi->algorithm_id);
   memcpy(hostid->hi_hdr, &hi_hdr, 4);
   len = sizeof(tlv_host_id);       /* 12 */
-
+  const BIGNUM *dsa_p, *dsa_q, *dsa_g, *dsa_pub_key;
+  const BIGNUM *rsa_n, *rsa_e;
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:     /* RDATA word: flags(16), proto(8), alg(8) */
       data[len] = (__u8) (hi->size - 64) / 8;           /* T value (1 byte) */
       len++;
-      len += bn2bin_safe(hi->dsa->q, &data[len], DSA_PRIV);
-      len += bn2bin_safe(hi->dsa->p, &data[len], hi->size);
-      len += bn2bin_safe(hi->dsa->g, &data[len], hi->size);
-      len += bn2bin_safe(hi->dsa->pub_key, &data[len], hi->size);
+      DSA_get0_pqg(hi->dsa, &dsa_p,&dsa_q, &dsa_g);
+      DSA_get0_key(hi->dsa, &dsa_pub_key, NULL);
+      len += bn2bin_safe(dsa_q, &data[len], DSA_PRIV);
+      len += bn2bin_safe(dsa_p, &data[len], hi->size);
+      len += bn2bin_safe(dsa_g, &data[len], hi->size);
+      len += bn2bin_safe(dsa_pub_key, &data[len], hi->size);
       break;
     case HI_ALG_RSA:
-      e_len = BN_num_bytes(hi->rsa->e);
+      RSA_get0_key(hi->rsa, &rsa_n, &rsa_e, NULL);
+      e_len = BN_num_bytes(rsa_e);
       /* exponent length */
       if (e_len <= 255)
         {
@@ -2182,9 +2188,9 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
           len += 2;
         }
       /* public exponent */
-      len += bn2bin_safe(hi->rsa->e, &data[len], e_len);
+      len += bn2bin_safe(rsa_e, &data[len], e_len);
       /* public modulus */
-      len += bn2bin_safe(hi->rsa->n, &data[len], RSA_size(hi->rsa));
+      len += bn2bin_safe(rsa_n, &data[len], RSA_size(hi->rsa));
       break;
     case HI_ALG_ECDSA:
       {
@@ -2394,7 +2400,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
   sig->length = 0;       /* set this later */
   sig->algorithm = hi->algorithm_id;
 
-
+  const BIGNUM *dsa_sig_r, *dsa_sig_s, *ecdsa_sig_r, *ecdsa_sig_s;
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:
@@ -2404,8 +2410,9 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
       /* calculate the DSA signature of the message hash */
       dsa_sig = DSA_do_sign(md, SHA256_DIGEST_LENGTH, hi->dsa);
       /* build signature from DSA_SIG struct */
-      bn2bin_safe(dsa_sig->r, &sig->signature[1], 20);
-      bn2bin_safe(dsa_sig->s, &sig->signature[21], 20);
+      DSA_SIG_get0(dsa_sig, &dsa_sig_r, &dsa_sig_s);
+      bn2bin_safe(dsa_sig_r, &sig->signature[1], 20);
+      bn2bin_safe(dsa_sig_s, &sig->signature[21], 20);
       DSA_SIG_free(dsa_sig);
       break;
     case HI_ALG_RSA:
@@ -2434,9 +2441,9 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
         int curve_param_size = ECDSA_curve_PARAM_SIZE[curve_name];
         memset(sig->signature, 0, curve_param_size*2);
         ecdsa_sig = ECDSA_do_sign(md, curve_param_size, hi->ecdsa);
-
-        bn2bin_safe(ecdsa_sig->r, &sig->signature[0], curve_param_size);
-        bn2bin_safe(ecdsa_sig->s, &sig->signature[curve_param_size], curve_param_size);
+        ECDSA_SIG_get0(ecdsa_sig, &ecdsa_sig_r, &ecdsa_sig_s);
+        bn2bin_safe(ecdsa_sig_r, &sig->signature[0], curve_param_size);
+        bn2bin_safe(ecdsa_sig_s, &sig->signature[curve_param_size], curve_param_size);
 
         ECDSA_SIG_free(ecdsa_sig);
         sig_len = 2 * curve_param_size; 
