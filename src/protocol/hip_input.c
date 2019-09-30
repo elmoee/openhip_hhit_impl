@@ -961,11 +961,14 @@ restore_saved_peer_hi:
 }
 
 int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length) {
-  for(int i = 0; i < length; i++, id++){
-    // Right shift to convert from 8bit to 4bit.
-    if((*id >> 4) == hip_a->hi->hit_suite_id){
-      hip_a -> hit_suite = (*id >> 4);
-      return(0);
+  /* TODO: TDDE21 Determine if priority should be handled in this manner. */
+  for(__u8 *i = id; i-id < length; ++i){
+    for (int j = 0; j < sizeof(HCNF.hit_suite_list)/sizeof(HCNF.hit_suite_list[0]); ++j) {
+      /* Right shift to convert from 8bit to 4bit. */
+      if((*i >> 4) == HCNF.hit_suite_list[j]){
+        hip_a->hit_suite = (*i >> 4);
+        return(0);
+      }
     }
   }
   return(-1);
@@ -1503,7 +1506,8 @@ I2_ERROR:
           hiph->hdr_len = (len / 8) - 1;
           log_(NORM, "HMAC verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
-          hip_a->hit_suite = hip_a->hi->hit_suite_id;
+          /* TODO: TDDE21 Get the actual hit_suite from hip peer (previous assoc in hip_arr). */
+          hip_a->hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
           if (validate_hmac(data, len,
                             hmac, length,
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
