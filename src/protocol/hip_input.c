@@ -52,6 +52,7 @@
 #include <asm/types.h>
 #endif /* __MACOSX__ */
 #include <netinet/ip.h>         /* struct iphdr                 */
+#include <netinet/ip_icmp.h>    /* struct icmp                  */
 #include <sys/time.h>           /* gettimeofday()               */
 #include <pthread.h>            /* for RVS lifetime thread	*/
 #include <unistd.h>             /* sleep()			*/
@@ -205,6 +206,19 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
     }
   if (hiph->version != HIP_PROTO_VER)
     {
+      int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+      if(sockfd<0) {
+        log_(WARN, "Socket file desciptor not received\n");
+        return(-2);
+      }
+
+      struct icmp pckt;
+      pckt.icmp_type = ICMP_PARAMPROB;
+      pckt.icmp_hun.ih_pptr = 3;
+      pckt.icmp_cksum = checksum_packet((__u8*)&pckt, SA(&addr), dst);
+      if( sendto(sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&addr, sizeof(addr)) <= 0 ) {
+        log_(WARN, "Packet error: failed to send icmp\n");
+      }
       log_(WARN, "Packet error: version %u res %u\n",
            hiph->version, hiph->res);
       return(-2);
