@@ -2250,8 +2250,8 @@ int khi_hi_input(hi_node *hi, __u8 *out)
   int location;
   __u16 e_len;
 
-  const BIGNUM *dsa_p, *dsa_q, *dsa_g, *dsa_pub_key;
-  const BIGNUM *rsa_n, *rsa_e;
+  const BIGNUM *dsa_p = NULL, *dsa_q = NULL, *dsa_g = NULL, *dsa_pub_key = NULL;
+  const BIGNUM *rsa_n = NULL, *rsa_e = NULL;
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:     /* RFC 2536 */
@@ -2333,7 +2333,7 @@ int khi_hi_input(hi_node *hi, __u8 *out)
  */
 int hi_to_hit(hi_node *hi, hip_hit hit, int type)
 {
-  printf("Running hi_to_hit with hit: %s with type = %d", hit, type);
+  //printf("Running hi_to_hit with hit: %s with type = %d", hit, type);
   int len, hash_len;
   __u8 *data = NULL;
   SHA_CTX sha1_ctx;
@@ -2367,7 +2367,13 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
         }
       len = sizeof(khi_context_id);
       RSA_get0_key(hi->rsa, NULL , &rsa_e, NULL);
+      printf("AWWWWWWWWWWWWWWWWWWWWWWWWWWWW %d\n",len);
+
+      if(rsa_e == NULL) 
+         printf("YEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH");
+BN_print_fp(stdout,rsa_e);
       len += BN_num_bytes(rsa_e) + RSA_size(hi->rsa);
+
       if (BN_num_bytes(rsa_e) > 255)
         {
           len += 3;

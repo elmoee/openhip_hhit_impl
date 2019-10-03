@@ -251,7 +251,8 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
   addr = (struct sockaddr*) &ss_addr;
   memset(hi->hit, 0, HIT_SIZE);
   memset(&hi->lsi, 0, sizeof(struct sockaddr_storage));
-
+  BIGNUM *dsa_p = NULL, *dsa_q = NULL, *dsa_g = NULL, *dsa_pub_key = NULL, *dsa_priv_key = NULL;
+  BIGNUM *rsa_n = NULL, *rsa_e = NULL, *rsa_d = NULL, *rsa_p = NULL, *rsa_q = NULL, *rsa_dmp1 = NULL, *rsa_dmq1 = NULL, *rsa_iqmp  = NULL;
   for (; node; node = node->next)
     {
       /* skip entity refs */
@@ -261,8 +262,7 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
         }
 
       data = (char *)xmlNodeGetContent(node);
-      BIGNUM *dsa_p, *dsa_q, *dsa_g, *dsa_pub_key, *dsa_priv_key;
-      BIGNUM *rsa_n, *rsa_e, *rsa_d, *rsa_p, *rsa_q, *rsa_dmp1, *rsa_dmq1, *rsa_iqmp;
+      
       /* populate the DSA structure */
       switch (hi->algorithm_id)
         {
@@ -270,69 +270,58 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
           if (strcmp((char *)node->name, "P") == 0)
             {
               BN_hex2bn(&dsa_p, data);
-              DSA_set0_pqg(hi->dsa,dsa_p, NULL, NULL);
             }
           else if (strcmp((char *)node->name, "Q") == 0)
             {
               BN_hex2bn(&dsa_q, data);
-              DSA_set0_pqg(hi->dsa,NULL, dsa_q, NULL);
             }
           else if (strcmp((char *)node->name, "G") == 0)
             {
               BN_hex2bn(&dsa_g, data);
-              DSA_set0_pqg(hi->dsa,NULL, NULL, dsa_g);
             }
           else if (strcmp((char *)node->name, "PUB") == 0)
             {
               BN_hex2bn(&dsa_pub_key, data);
-              DSA_set0_key(hi->dsa,dsa_pub_key, NULL);
             }
           else if (strcmp((char *)node->name, "PRIV") == 0)
             {
               BN_hex2bn(&dsa_priv_key, data);
-              DSA_set0_key(hi->dsa,NULL, dsa_priv_key);
             }
           break;
         case HI_ALG_RSA:
           if (strcmp((char *)node->name, "N") == 0)
             {
               BN_hex2bn(&rsa_n, data);
-              RSA_set0_key(hi->rsa,rsa_n,NULL,NULL);
             }
           else if (strcmp((char *)node->name, "E") == 0)
             {
               BN_hex2bn(&rsa_e, data);
-              RSA_set0_key(hi->rsa,NULL,rsa_e,NULL);
             }
           else if (strcmp((char *)node->name, "D") == 0)
             {
               BN_hex2bn(&rsa_d, data);
-              RSA_set0_key(hi->rsa,NULL,NULL,rsa_d);
+
             }
           else if (strcmp((char *)node->name, "P") == 0)
             {
               BN_hex2bn(&rsa_p, data);
-              RSA_set0_factors(hi->rsa,rsa_p,NULL);
+
             }
           else if (strcmp((char *)node->name, "Q") == 0)
             {
               BN_hex2bn(&rsa_q, data);
-              RSA_set0_factors(hi->rsa,NULL,rsa_q);
             }
           else if (strcmp((char *)node->name, "dmp1") == 0)
             {
               BN_hex2bn(&rsa_dmp1, data);
-              RSA_set0_crt_params(hi->rsa,rsa_dmp1,NULL,NULL);
             }
           else if (strcmp((char *)node->name, "dmq1") == 0)
             {
               BN_hex2bn(&rsa_dmq1, data);
-              RSA_set0_crt_params(hi->rsa,NULL,rsa_dmq1,NULL);
             }
           else if (strcmp((char *)node->name, "iqmp") == 0)
             {
               BN_hex2bn(&rsa_iqmp, data);
-              RSA_set0_crt_params(hi->rsa,NULL,NULL,rsa_iqmp);
             }
             break;
           case HI_ALG_ECDSA:
@@ -446,6 +435,20 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
         }
       xmlFree(data);
     }
+    switch (hi->algorithm_id)
+    {
+      case HI_ALG_DSA:
+        DSA_set0_pqg(hi->dsa,dsa_p, dsa_q, dsa_g);
+        DSA_set0_key(hi->dsa,dsa_pub_key, dsa_priv_key);
+        break;
+      case HI_ALG_RSA:
+        RSA_set0_key(hi->rsa,rsa_n,rsa_e,rsa_d);
+        RSA_set0_factors(hi->rsa,rsa_p,rsa_q);
+        RSA_set0_crt_params(hi->rsa,rsa_dmp1,rsa_dmq1,rsa_iqmp);
+        break;
+      default:
+        break;
+    }    
 }
 
 #ifdef HIP_VPLS

@@ -158,14 +158,15 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
       break;
     case HI_ALG_RSA:
       ;
-      cb = BN_GENCB_new();
+
       BIGNUM *be = BN_new();
       rsa = RSA_new();
-      RSA_generate_key_ex(rsa,opts->bitsize, be, cb);
-      if (!rsa)
+      BN_set_word(be,RSA_F4);
+      // CHRLI should be  be randomly selected
+      err = RSA_generate_key_ex(rsa,opts->bitsize, be, NULL);
+      if (err < 1 )
         {
           BN_free(be);
-          BN_GENCB_free(cb);
           RSA_free(rsa);
           fprintf(stderr, "RSA_generate_key() failed.\n");
           exit(1);
@@ -173,7 +174,6 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
       else
         {
           BN_free(be);
-          BN_GENCB_free(cb);
         }
       break;
     case HI_ALG_ECDSA:
@@ -222,8 +222,8 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
     }
   xmlNewChild(hi, NULL, BAD_CAST "name", BAD_CAST opts->name);
 
-  const BIGNUM *dsa_p, *dsa_q, *dsa_g, *dsa_pub_key, *dsa_priv_key;
-  const BIGNUM *rsa_n,*rsa_e, *rsa_d, *rsa_p, *rsa_q, *rsa_dmp1, *rsa_dmq1, *rsa_iqmp;
+  const BIGNUM *dsa_p  = NULL, *dsa_q = NULL , *dsa_g = NULL, *dsa_pub_key = NULL, *dsa_priv_key = NULL;
+  const BIGNUM *rsa_n = NULL ,*rsa_e = NULL, *rsa_d = NULL, *rsa_p = NULL, *rsa_q = NULL, *rsa_dmp1 = NULL, *rsa_dmq1 = NULL, *rsa_iqmp = NULL;
   switch (opts->type)
     {
     case HI_ALG_DSA:
@@ -956,7 +956,6 @@ int main(int argc, char *argv[])
           generate_HI(root_node, &opts);
         }
     }
-
   printf("\nStoring results to file '%s'.\n\n", filename);
   xmlSaveFormatFileEnc(filename, doc, "UTF-8", 1);
   xmlFreeDoc(doc);
