@@ -2024,7 +2024,7 @@ int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites)
   }
 
   tlv->length = htons((__u16)len);
-  len = eight_byte_align(len*2 + 4);
+  len = eight_byte_align(len);
   return(len);
 }
 

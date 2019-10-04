@@ -52,6 +52,7 @@
 #include <asm/types.h>
 #endif /* __MACOSX__ */
 #include <netinet/ip.h>         /* struct iphdr                 */
+#include <netinet/ip_icmp.h>    /* struct icmp                  */
 #include <sys/time.h>           /* gettimeofday()               */
 #include <pthread.h>            /* for RVS lifetime thread	*/
 #include <unistd.h>             /* sleep()			*/
@@ -205,6 +206,19 @@ int hip_parse_hdr(__u8 *data, int len, struct sockaddr *src,
     }
   if (hiph->version != HIP_PROTO_VER)
     {
+      int sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+      if(sockfd<0) {
+        log_(WARN, "Socket file desciptor not received\n");
+        return(-2);
+      }
+
+      struct icmp pckt;
+      pckt.icmp_type = ICMP_PARAMPROB;
+      pckt.icmp_hun.ih_pptr = 3;
+      pckt.icmp_cksum = checksum_packet((__u8*)&pckt, SA(&addr), dst);
+      if( sendto(sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&addr, sizeof(addr)) <= 0 ) {
+        log_(WARN, "Packet error: failed to send icmp\n");
+      }
       log_(WARN, "Packet error: version %u res %u\n",
            hiph->version, hiph->res);
       return(-2);
@@ -961,11 +975,14 @@ restore_saved_peer_hi:
 }
 
 int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length) {
-  for(int i = 0; i < length; i++, id++){
-    // Right shift to convert from 8bit to 4bit.
-    if((*id >> 4) == hip_a->hi->hit_suite_id){
-      hip_a -> hit_suite = (*id >> 4);
-      return(0);
+  /* TODO: TDDE21 Determine if priority should be handled in this manner. */
+  for(__u8 *i = id; i-id < length; ++i){
+    for (int j = 0; j < sizeof(HCNF.hit_suite_list)/sizeof(HCNF.hit_suite_list[0]); ++j) {
+      /* Right shift to convert from 8bit to 4bit. */
+      if((*i >> 4) == HCNF.hit_suite_list[j]){
+        hip_a->hit_suite = (*i >> 4);
+        return(0);
+      }
     }
   }
   return(-1);
@@ -1503,7 +1520,8 @@ I2_ERROR:
           hiph->hdr_len = (len / 8) - 1;
           log_(NORM, "HMAC verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
-          hip_a->hit_suite = hip_a->hi->hit_suite_id;
+          /* TODO: TDDE21 Get the actual hit_suite from hip peer (previous assoc in hip_arr). */
+          hip_a->hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
           if (validate_hmac(data, len,
                             hmac, length,
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
