@@ -194,6 +194,7 @@ int main_loop(int argc, char **argv)
   HCNF.hip_ciphers[1] = HIP_CIPHER_AES256_CBC;
   HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
   HCNF.hit_suite_list[1] = HIT_SUITE_4BIT_ECDSA_SHA384;
+  HCNF.hit_suite_list[2] = HIT_SUITE_4BIT_ECDSA_LOW_SHA1;
   HCNF.dh_lifetime = 900;
   HCNF.r1_lifetime = 300;
   HCNF.msl = 5;
