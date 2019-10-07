@@ -478,6 +478,7 @@ void generate_conf_file(char *filename)
   xmlNewChild(root_node, NULL, BAD_CAST "dh_group", BAD_CAST "3");
   xmlNewChild(root_node, NULL, BAD_CAST "dh_lifetime", BAD_CAST "900");
   xmlNewChild(root_node, NULL, BAD_CAST "r1_lifetime", BAD_CAST "300");
+  xmlNewChild(root_node, NULL, BAD_CAST "preferred_hi", BAD_CAST "default-1024");
   xmlNewChild(root_node, NULL, BAD_CAST "failure_timeout", BAD_CAST "50");
   xmlNewChild(root_node, NULL, BAD_CAST "msl", BAD_CAST "5");
   xmlNewChild(root_node, NULL, BAD_CAST "ual", BAD_CAST "600");
