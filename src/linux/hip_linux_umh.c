@@ -55,7 +55,6 @@
 #include <linux/if.h>           /* TAP support */
 #include <linux/if_tun.h>       /* TAP support */
 #endif
-
 #include <hip/hip_version.h>
 #include <hip/hip_service.h>
 #include <hip/hip_types.h>

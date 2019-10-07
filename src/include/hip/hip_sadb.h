@@ -125,7 +125,7 @@ typedef struct _hip_sadb_entry
   __u64 replay_win_max;                 /* right side of received window */
   __u64 replay_win_map;                 /* anti-replay bitmap */
   char iv[8];
-  des_key_schedule ks[3];               /* 3-DES keys */
+  DES_key_schedule ks[3];               /* 3-DES keys */
   AES_KEY *aes_key;                     /* AES key */
   BF_KEY *bf_key;                       /* BLOWFISH key */
   hip_mutex_t rw_lock;

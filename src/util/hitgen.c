@@ -102,17 +102,18 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   struct sockaddr_storage hit;
   struct sockaddr_in lsi;
   xmlNodePtr hi;
-  unsigned long e;
   hi_node hostid;
 
   /* Crypto stuff */
   BIO *bp;
   DSA *dsa = NULL;
   RSA *rsa = NULL;
+  BN_GENCB *cb = NULL;
   EC_KEY* ecdsa = NULL;
+  printf("check");
   printf("Generating a %d-bit %s key\n",
          opts->bitsize, HI_TYPESTR(opts->type));
-
+  printf("after check");
   
   
   if (opts->bitsize < 512)
@@ -135,11 +136,15 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
     {
     case HI_ALG_DSA:
       printf("Generating DSA parameters (p,q,g)...");
-      dsa = DSA_generate_parameters(opts->bitsize, seed, sizeof(seed),
-                                    NULL, NULL, cb, stdout);
+      dsa = DSA_new();
+      cb = BN_GENCB_new();
+      DSA_generate_parameters_ex(dsa,opts->bitsize, seed, sizeof(seed),
+                                    NULL, NULL, cb);
+      BN_GENCB_free(cb);
       printf("\n");
       if (dsa == NULL)
         {
+          DSA_free(dsa);
           fprintf(stderr, "DSA_generate_parameters failed\n");
           exit(1);
         }
@@ -152,12 +157,23 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
         }
       break;
     case HI_ALG_RSA:
-      e = HIP_RSA_DFT_EXP;
-      rsa = RSA_generate_key(opts->bitsize, e, cb, stdout);
-      if (!rsa)
+      ;
+
+      BIGNUM *be = BN_new();
+      rsa = RSA_new();
+      BN_set_word(be,RSA_F4);
+      // CHRLI should be  be randomly selected
+      err = RSA_generate_key_ex(rsa,opts->bitsize, be, NULL);
+      if (err < 1 )
         {
+          BN_free(be);
+          RSA_free(rsa);
           fprintf(stderr, "RSA_generate_key() failed.\n");
           exit(1);
+        }
+      else
+        {
+          BN_free(be);
         }
       break;
     case HI_ALG_ECDSA:
@@ -206,29 +222,36 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
     }
   xmlNewChild(hi, NULL, BAD_CAST "name", BAD_CAST opts->name);
 
+  const BIGNUM *dsa_p  = NULL, *dsa_q = NULL , *dsa_g = NULL, *dsa_pub_key = NULL, *dsa_priv_key = NULL;
+  const BIGNUM *rsa_n = NULL ,*rsa_e = NULL, *rsa_d = NULL, *rsa_p = NULL, *rsa_q = NULL, *rsa_dmp1 = NULL, *rsa_dmq1 = NULL, *rsa_iqmp = NULL;
   switch (opts->type)
     {
     case HI_ALG_DSA:
-      xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(dsa->p));
-      xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(dsa->q));
-      xmlNewChild(hi, NULL, BAD_CAST "G", BAD_CAST BN_bn2hex(dsa->g));
+      DSA_get0_pqg(dsa, &dsa_p,&dsa_q,&dsa_g);
+      xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(dsa_p));
+      xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(dsa_q));
+      xmlNewChild(hi, NULL, BAD_CAST "G", BAD_CAST BN_bn2hex(dsa_g));
+      DSA_get0_key(dsa, &dsa_pub_key, &dsa_priv_key);
       xmlNewChild(hi, NULL, BAD_CAST "PUB",
-                  BAD_CAST BN_bn2hex(dsa->pub_key));
+                  BAD_CAST BN_bn2hex(dsa_pub_key));
       xmlNewChild(hi, NULL,BAD_CAST "PRIV",
-                  BAD_CAST BN_bn2hex(dsa->priv_key));
+                  BAD_CAST BN_bn2hex(dsa_priv_key));
       break;
     case HI_ALG_RSA:
-      xmlNewChild(hi, NULL, BAD_CAST "N", BAD_CAST BN_bn2hex(rsa->n));
-      xmlNewChild(hi, NULL, BAD_CAST "E", BAD_CAST BN_bn2hex(rsa->e));
-      xmlNewChild(hi, NULL, BAD_CAST "D", BAD_CAST BN_bn2hex(rsa->d));
-      xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(rsa->p));
-      xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(rsa->q));
+      RSA_get0_key(rsa, &rsa_n, &rsa_e, &rsa_d);
+      xmlNewChild(hi, NULL, BAD_CAST "N", BAD_CAST BN_bn2hex(rsa_n));
+      xmlNewChild(hi, NULL, BAD_CAST "E", BAD_CAST BN_bn2hex(rsa_e));
+      xmlNewChild(hi, NULL, BAD_CAST "D", BAD_CAST BN_bn2hex(rsa_d));
+      RSA_get0_factors(rsa, &rsa_p, &rsa_q);
+      xmlNewChild(hi, NULL, BAD_CAST "P", BAD_CAST BN_bn2hex(rsa_p));
+      xmlNewChild(hi, NULL, BAD_CAST "Q", BAD_CAST BN_bn2hex(rsa_q));
+      RSA_get0_crt_params(rsa,&rsa_dmp1, &rsa_dmq1, &rsa_iqmp);
       xmlNewChild(hi, NULL, BAD_CAST "dmp1",
-                  BAD_CAST BN_bn2hex(rsa->dmp1));
+                  BAD_CAST BN_bn2hex(rsa_dmp1));
       xmlNewChild(hi, NULL, BAD_CAST "dmq1",
-                  BAD_CAST BN_bn2hex(rsa->dmq1));
+                  BAD_CAST BN_bn2hex(rsa_dmq1));
       xmlNewChild(hi, NULL, BAD_CAST "iqmp",
-                  BAD_CAST BN_bn2hex(rsa->iqmp));
+                  BAD_CAST BN_bn2hex(rsa_iqmp));
       break;
     case HI_ALG_ECDSA: 
       sprintf(
@@ -587,7 +610,7 @@ int main(int argc, char *argv[])
   xmlDocPtr doc = NULL;
   xmlNodePtr root_node = NULL, node;
   int my_filename_exists = 0;
-
+  printf("sup");
 #ifndef __WIN32__
   struct stat stbuf;
 
@@ -934,7 +957,6 @@ int main(int argc, char *argv[])
           generate_HI(root_node, &opts);
         }
     }
-
   printf("\nStoring results to file '%s'.\n\n", filename);
   xmlSaveFormatFileEnc(filename, doc, "UTF-8", 1);
   xmlFreeDoc(doc);

@@ -529,13 +529,17 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       hi->dsa = DSA_new();
       /* get Q, P, G, and Y */
       offset = 1;
-      hi->dsa->q = BN_bin2bn(&data[offset], DSA_PRIV, 0);
+      BIGNUM *dsa_q = BN_bin2bn(&data[offset], DSA_PRIV, 0);
       offset += DSA_PRIV;
-      hi->dsa->p = BN_bin2bn(&data[offset], key_len, 0);
+      BIGNUM *dsa_p = BN_bin2bn(&data[offset], key_len, 0);
       offset += key_len;
-      hi->dsa->g = BN_bin2bn(&data[offset], key_len, 0);
+      BIGNUM *dsa_g = BN_bin2bn(&data[offset], key_len, 0);
       offset += key_len;
-      hi->dsa->pub_key = BN_bin2bn(&data[offset], key_len, 0);
+      BIGNUM* dsa_pub_key = BN_bin2bn(&data[offset], key_len, 0);
+
+      DSA_set0_pqg(hi->dsa,dsa_p, dsa_q, dsa_g);
+      DSA_set0_key(hi->dsa, dsa_pub_key,NULL);
+      // CHRLI ateam set priv, steam do not
 #ifndef HIP_VPLS
       log_(NORM, "Found DSA HI with public key: 0x");
       print_hex((char *)&data[offset], key_len);
@@ -546,15 +550,16 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
     case HI_ALG_RSA:
       hi->rsa = RSA_new();
       offset = ((e_len > 255) ? 3 : 1);
-      hi->rsa->e = BN_bin2bn(&data[offset], e_len, 0);
+      BIGNUM *rsa_e = BN_bin2bn(&data[offset], e_len, 0);
       offset += e_len;
-      hi->rsa->n = BN_bin2bn(&data[offset], key_len, 0);
+      BIGNUM *rsa_n = BN_bin2bn(&data[offset], key_len, 0);
 #ifndef HIP_VPLS
       log_(NORM, "Found RSA HI with public modulus: 0x");
       print_hex((char *)&data[offset], key_len);
       log_(NORM, "\n");
 #endif
       offset += key_len;
+      RSA_set0_key(hi->rsa,rsa_n,rsa_e,NULL);
       break;
     case HI_ALG_ECDSA:
       offset = 2;
@@ -2245,6 +2250,8 @@ int khi_hi_input(hi_node *hi, __u8 *out)
   int location;
   __u16 e_len;
 
+  const BIGNUM *dsa_p = NULL, *dsa_q = NULL, *dsa_g = NULL, *dsa_pub_key = NULL;
+  const BIGNUM *rsa_n = NULL, *rsa_e = NULL;
   switch (hi->algorithm_id)
     {
     case HI_ALG_DSA:     /* RFC 2536 */
@@ -2252,18 +2259,22 @@ int khi_hi_input(hi_node *hi, __u8 *out)
       location = 0;
       out[location] = (hi->size - 64) / 8;
       location++;
-      bn2bin_safe(hi->dsa->q, &out[location], DSA_PRIV);
-      bn2bin_safe(hi->dsa->p, &out[location + DSA_PRIV], hi->size);
-      bn2bin_safe(hi->dsa->g, &out[location + DSA_PRIV + hi->size],
+      DSA_get0_pqg(hi->dsa, &dsa_p, &dsa_q, &dsa_g);
+      DSA_get0_key(hi->dsa, &dsa_pub_key, NULL);
+      bn2bin_safe(dsa_q, &out[location], DSA_PRIV);
+      bn2bin_safe(dsa_p, &out[location + DSA_PRIV], hi->size);
+      bn2bin_safe(dsa_g, &out[location + DSA_PRIV + hi->size],
                   hi->size);
-      bn2bin_safe(hi->dsa->pub_key,
+      bn2bin_safe(dsa_pub_key,
                   &out[location + DSA_PRIV + (2 * hi->size)],
                   hi->size);
       break;
     case HI_ALG_RSA:     /* RFC 3110 */
       /* Encode e_len, exponent(e), modulus(n) */
       location = 0;
-      e_len = BN_num_bytes(hi->rsa->e);
+      //CHRLI SAME
+      RSA_get0_key(hi->rsa, &rsa_n, &rsa_e, NULL);
+      e_len = BN_num_bytes(rsa_e);
       if (e_len > 255)
         {
           __u16 *p =  (__u16*) &out[location + 1];
@@ -2276,8 +2287,8 @@ int khi_hi_input(hi_node *hi, __u8 *out)
           out[location] = (__u8) e_len;
           location++;
         }
-      location += bn2bin_safe(hi->rsa->e, &out[location], e_len);
-      location += bn2bin_safe(hi->rsa->n, &out[location],
+      location += bn2bin_safe(rsa_e, &out[location], e_len);
+      location += bn2bin_safe(rsa_n, &out[location],
                               RSA_size(hi->rsa));
       break;
     case HI_ALG_ECDSA:
@@ -2322,7 +2333,7 @@ int khi_hi_input(hi_node *hi, __u8 *out)
  */
 int hi_to_hit(hi_node *hi, hip_hit hit, int type)
 {
-  printf("Running hi_to_hit with hit: %s with type = %d", hit, type);
+  //printf("Running hi_to_hit with hit: %s with type = %d", hit, type);
   int len, hash_len;
   __u8 *data = NULL;
   SHA_CTX sha1_ctx;
@@ -2336,7 +2347,7 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
       log_(WARN, "hi_to_hit(): NULL hi\n");
       return(-1);
     }
-
+  const BIGNUM *rsa_e;
   /* calculate lengths and validate HIs */
   switch (hi->algorithm_id)
     {
@@ -2355,8 +2366,15 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
           return(-1);
         }
       len = sizeof(khi_context_id);
-      len += BN_num_bytes(hi->rsa->e) + RSA_size(hi->rsa);
-      if (BN_num_bytes(hi->rsa->e) > 255)
+      RSA_get0_key(hi->rsa, NULL , &rsa_e, NULL);
+      printf("AWWWWWWWWWWWWWWWWWWWWWWWWWWWW %d\n",len);
+
+      if(rsa_e == NULL) 
+         printf("YEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH");
+BN_print_fp(stdout,rsa_e);
+      len += BN_num_bytes(rsa_e) + RSA_size(hi->rsa);
+
+      if (BN_num_bytes(rsa_e) > 255)
         {
           len += 3;
         }
@@ -3155,7 +3173,8 @@ void init_crypto()
   char rnd_seed[20] = {0};
   int i;
 
-  CRYPTO_malloc_init();
+  //CHRLI think this is right , CRYPTO_malloc_init() was previous
+  OPENSSL_malloc_init();
 
   /* seed the random number generator */
 #ifdef WIN32

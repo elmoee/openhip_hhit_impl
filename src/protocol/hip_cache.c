@@ -412,14 +412,16 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
   else
   {
     DH *dh = DH_new();
-    dh->g = BN_new();
-    dh->p = BN_new();
+    BIGNUM *dh_p, *dh_g;
+    dh_g = BN_new();
+    dh_p = BN_new();
     /* Put prime corresponding to group_id into dh->p */
     BN_bin2bn(dhprime[group_id],
-              dhprime_len[group_id], dh->p);
+              dhprime_len[group_id], dh_p);
     /* Put generator corresponding to group_id into dh->g */
-    BN_set_word(dh->g, dhgen[group_id]);
+    BN_set_word(dh_g, dhgen[group_id]);
     /* By not setting dh->priv_key, allow crypto lib to pick at random */
+    DH_set0_pqg(dh,dh_p, NULL,dh_g); 
     if ((err = DH_generate_key(dh)) != 1)
     {
       log_(ERR, "DH key generation failed %d.\n", group_id);

@@ -1329,8 +1329,8 @@ int hip_xmlrpc_parse_response(int mode, char *xmldata, int len,
   xmlNodePtr node, node_val;
   int retval = -10, i;
   xmlChar *data;
-  EVP_ENCODE_CTX ctx;
-
+  EVP_ENCODE_CTX *ctx;
+  ctx = EVP_ENCODE_CTX_new();
   /* log_(NORM, "Got the DHT response (content-length=%d):\n%s\n",
    *    len, xmldata); // */
   if ((doc = xmlParseMemory(xmldata, len)) == NULL)
@@ -1418,8 +1418,8 @@ int hip_xmlrpc_parse_response(int mode, char *xmldata, int len,
           /* decode base64 into value pointer */
           /* *value_len = EVP_DecodeBlock((unsigned char *)value, */
           /*			data, strlen((char *)data)); */
-          EVP_DecodeInit(&ctx);
-          retval = EVP_DecodeUpdate(&ctx, (__u8 *)value, &i,
+          EVP_DecodeInit(ctx);
+          retval = EVP_DecodeUpdate(ctx, (__u8 *)value, &i,
                                     (__u8 *)data,
                                     strlen((char *)data));
           if (retval < 0)
@@ -1428,7 +1428,7 @@ int hip_xmlrpc_parse_response(int mode, char *xmldata, int len,
               continue;
             }
           *value_len = i;
-          EVP_DecodeFinal(&ctx, data, &i);
+          EVP_DecodeFinal(ctx, data, &i);
           retval = 0;
           xmlFree(data);
           /* the last value encountered will be returned */
