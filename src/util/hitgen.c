@@ -110,10 +110,8 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   RSA *rsa = NULL;
   BN_GENCB *cb = NULL;
   EC_KEY* ecdsa = NULL;
-  printf("check");
   printf("Generating a %d-bit %s key\n",
          opts->bitsize, HI_TYPESTR(opts->type));
-  printf("after check");
   
   
   if (opts->bitsize < 512)
@@ -162,7 +160,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
       BIGNUM *be = BN_new();
       rsa = RSA_new();
       BN_set_word(be,RSA_F4);
-      // CHRLI should be  be randomly selected
+      //TODO CHRLI  be should be  be randomly selected?
       err = RSA_generate_key_ex(rsa,opts->bitsize, be, NULL);
       if (err < 1 )
         {
@@ -610,7 +608,6 @@ int main(int argc, char *argv[])
   xmlDocPtr doc = NULL;
   xmlNodePtr root_node = NULL, node;
   int my_filename_exists = 0;
-  printf("sup");
 #ifndef __WIN32__
   struct stat stbuf;
 

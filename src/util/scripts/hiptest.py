@@ -393,10 +393,12 @@ class HipNode(pycore.nodes.LxcNode):
                                                "dev", "hip0"])
             if status == 0:
                 r = re.search('    inet 1\.[\d]+\.[\d]+\.[\d]+', result)
-                lsi = r.group().split(' ')[-1]
-                return lsi
+                if r is not None:
+                    lsi = r.group().split(' ')[-1]
+                    return lsi
             retries -= 1
             time.sleep(0.25)
+        print("out of tries")
         return None
 
     def checkhiplog(self, search, retries=15):
