@@ -2367,8 +2367,8 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
         }
       len = sizeof(khi_context_id);
       RSA_get0_key(hi->rsa, NULL , &rsa_e, NULL);
-      if(rsa_e == NULL) 
-        len += BN_num_bytes(rsa_e) + RSA_size(hi->rsa);
+
+      len += BN_num_bytes(rsa_e) + RSA_size(hi->rsa);
 
       if (BN_num_bytes(rsa_e) > 255)
         {
