@@ -505,6 +505,9 @@ void generate_conf_file(char *filename)
   xmlNewChild(root_node, NULL, BAD_CAST "ual", BAD_CAST "600");
   xmlNewChild(root_node, NULL, BAD_CAST "min_reg_lifetime",BAD_CAST "96");
   xmlNewChild(root_node, NULL,BAD_CAST "max_reg_lifetime",BAD_CAST "255");
+  node = xmlNewChild(root_node, NULL, BAD_CAST "available_hit_suites", NULL);
+  node = xmlNewChild(node, NULL, BAD_CAST "suites", NULL);
+  xmlNewChild(node, NULL, BAD_CAST "suite", BAD_CAST "1");
   node = xmlNewChild(root_node, NULL, BAD_CAST "hip_sa", NULL);
   node = xmlNewChild(node, NULL, BAD_CAST "transforms", NULL);
   xmlNewChild(node, NULL, BAD_CAST "id", BAD_CAST "1");
