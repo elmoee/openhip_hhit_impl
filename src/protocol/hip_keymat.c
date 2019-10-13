@@ -35,6 +35,7 @@
 #include <openssl/sha.h>
 #include <openssl/des.h> /* DES_KEY_SZ == 8 bytes*/
 #include <openssl/dsa.h>
+#include <openssl/kdf.h>
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
@@ -142,34 +143,20 @@ void compute_keys(hip_assoc *hip_a)
   draw_keys(hip_a, TRUE, 0);
 }
 
-void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int location){
-  SHA_CTX sha1_ctx;
-  SHA256_CTX sha256_ctx;
-  SHA512_CTX sha512_ctx;
-
+const EVP_MD* get_hkdf_md(hip_assoc *hip_a)
+{
   //Uses RHASH from the HIT-suite to decide hash function
   switch (hip_a->hit_suite)
     {
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
-      SHA256_Init(&sha256_ctx);
-      SHA256_Update(&sha256_ctx, hashdata, location);
-      SHA256_Final(hash, &sha256_ctx);
-      break;
+      return EVP_sha256();
     case HIT_SUITE_4BIT_ECDSA_SHA384:
-      SHA384_Init(&sha512_ctx);
-      SHA384_Update(&sha512_ctx, hashdata, location);
-      SHA384_Final(hash, &sha512_ctx);
-      break;
+      return EVP_sha384();
     case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
-      SHA1_Init(&sha1_ctx);
-      SHA1_Update(&sha1_ctx, hashdata, location);
-      SHA1_Final(hash, &sha1_ctx);
-      break;
+      return EVP_sha1();
     default:
       // Default to SHA256 for backwards compatibility
-      SHA256_Init(&sha256_ctx);
-      SHA256_Update(&sha256_ctx, hashdata, location);
-      SHA256_Final(hash, &sha256_ctx);
+      return EVP_sha256();
     }
 }
 
@@ -179,11 +166,10 @@ void compute_hash(hip_assoc *hip_a, char *hashdata, unsigned char *hash, int loc
 
 int compute_keymat(hip_assoc *hip_a)
 {
-  int i, result;
-  int location, len, dh_secret_len, hashdata_len;
-  char *hashdata;
-  int sha_key_len = auth_key_len_hit_suite(hip_a->hit_suite); //TODO: Verify that a fallback value (sha256) is actually desired
-  unsigned char hash[sha_key_len], last_byte = 1;
+  int result;
+  int dh_secret_len, info_len, salt_len;
+  size_t keymat_len;
+  char *dh_secret, *info, *salt;
   BIGNUM *hit1, *hit2;
   hip_hit *hitp;
 
@@ -198,67 +184,76 @@ int compute_keymat(hip_assoc *hip_a)
       log_(NORM, "no peer HIT in compute_keymat()\n");
       return(-1);
     }
+
   hit1 = BN_bin2bn((unsigned char*)hitp, HIT_SIZE, NULL);
   hit2 = BN_bin2bn((unsigned char*)hip_a->hi->hit, HIT_SIZE, NULL);
   result = BN_ucmp(hit1, hit2);
 
+  /* HKDF keying material */
+  dh_secret_len = hip_a->dh_secret_len;
+  info_len = 2 * HIT_SIZE;
+  salt_len = 2 * sizeof(__u64);
+  keymat_len = KEYMAT_SIZE;
+  dh_secret = malloc(dh_secret_len);
+  info = malloc(info_len);
+  salt = malloc(salt_len);
+
   /* Kij */
-  dh_secret_len = (hip_a -> dh_secret_len);
-  hashdata_len = dh_secret_len + (2 * HIT_SIZE) + (2 * sizeof(__u64)) + 1;
-  hashdata = malloc(hashdata_len);
-  memcpy(hashdata, hip_a->dh_secret, dh_secret_len);
-  location = dh_secret_len;
+  memcpy(dh_secret, hip_a->dh_secret, hip_a->dh_secret_len);
+
   /* sort(Resp-HIT, Init-HIT) */
   if (result <= 0)         /* hit1 <= hit2 */
     {
-      memcpy(&hashdata[location], hitp, HIT_SIZE);
-      location += HIT_SIZE;
-      memcpy(&hashdata[location],
+      memcpy(info, hitp, HIT_SIZE);
+      memcpy(&info[HIT_SIZE],
              hip_a->hi->hit, HIT_SIZE);
-      location += HIT_SIZE;
     }
   else           /* hit1 > hit2 */
     {
-      memcpy(&hashdata[location],
+      memcpy(info,
              hip_a->hi->hit, HIT_SIZE);
-      location += HIT_SIZE;
-      memcpy(&hashdata[location], hitp, HIT_SIZE);
-      location += HIT_SIZE;
+      memcpy(&info[HIT_SIZE], hitp, HIT_SIZE);
     }
-  /* I | J */
-  memcpy(&hashdata[location], hip_a->cookie_r.i, sizeof(__u64));
-  location += sizeof(__u64);
-  memcpy(&hashdata[location], hip_a->cookie_j, sizeof(__u64));
-  location += sizeof(__u64);
 
-  /* 1 */
-  memcpy(&hashdata[location], &last_byte, sizeof(last_byte));
-  location += sizeof(last_byte);
+  /* #I | #J */
+  memcpy(salt, hip_a->cookie_r.i, sizeof(__u64));
+  memcpy(&salt[sizeof(__u64)], hip_a->cookie_j, sizeof(__u64));
 
-  /* SHA hash the concatenation */
-  compute_hash(hip_a, hashdata, hash, location);
-  memcpy(hip_a->keymat, hash, sha_key_len);
-  location = sha_key_len;
+  EVP_PKEY_CTX *pctx;
+  pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
 
-  /* compute K2 ... K38
-   * 768 bytes / 20 bytes per hash = 38 loops
-   * this is enough space for 32 ESP keys
-   */
-  for (i = 1; i < (KEYMAT_SIZE / sha_key_len); i++)
-    {
-      last_byte++;
-      memcpy(hashdata, hip_a->dh_secret, dh_secret_len);           /* Kij */
-      len = dh_secret_len;
-      memcpy(&hashdata[len], hash, sha_key_len);           /* K_i) */
-      len += sha_key_len;
-      memcpy(&hashdata[len], &last_byte, sizeof(last_byte));           /* i+1 */
-      len += sizeof(last_byte);
-      compute_hash(hip_a, hashdata, hash, len);
-      /* accumulate the keying material */
-      memcpy(&hip_a->keymat[location], hash, sha_key_len);
-      location += sha_key_len;
-    }
-  free(hashdata);
+  if (EVP_PKEY_derive_init(pctx) <= 0) {
+    log_(ERR, "HKDF init failed\n");
+    return -1;
+  }
+
+  if (EVP_PKEY_CTX_set_hkdf_md(pctx, get_hkdf_md(hip_a)) <= 0) {
+    log_(ERR, "HKDF message digest init failed\n");
+    return -1;
+  }
+
+  if (EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, salt_len) <= 0) {
+    log_(ERR, "HKDF salt init failed\n");
+    return -1;
+  }
+  if (EVP_PKEY_CTX_set1_hkdf_key(pctx, dh_secret, dh_secret_len) <= 0) {
+    log_(ERR, "HKDF dh secret init failed\n");
+    return -1;
+  }
+  if (EVP_PKEY_CTX_add1_hkdf_info(pctx, info, info_len) <= 0) {
+    log_(ERR, "HKDF info init failed\n");
+    return -1;
+  }
+  /* EXTRACT_AND_EXPAND is the default behaviour, 
+     thus filling the keymat buffer with esp keys. */
+  if (EVP_PKEY_derive(pctx, hip_a->keymat, &keymat_len) <= 0) {
+    log_(ERR, "HKDF failed to derive keys\n");
+    return -1;
+  }
+
+  free(info);
+  free(salt); 
+  free(dh_secret);
   BN_free(hit1);
   BN_free(hit2);
   return(0);
