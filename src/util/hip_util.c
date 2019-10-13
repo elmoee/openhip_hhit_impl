@@ -539,7 +539,7 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
 
       DSA_set0_pqg(hi->dsa,dsa_p, dsa_q, dsa_g);
       DSA_set0_key(hi->dsa, dsa_pub_key,NULL);
-      // CHRLI ateam set priv, steam do not
+      //TODO CHRLI ateam set priv, steam do not
 #ifndef HIP_VPLS
       log_(NORM, "Found DSA HI with public key: 0x");
       print_hex((char *)&data[offset], key_len);
@@ -2272,7 +2272,7 @@ int khi_hi_input(hi_node *hi, __u8 *out)
     case HI_ALG_RSA:     /* RFC 3110 */
       /* Encode e_len, exponent(e), modulus(n) */
       location = 0;
-      //CHRLI SAME
+      //TODO CHRLI SAME
       RSA_get0_key(hi->rsa, &rsa_n, &rsa_e, NULL);
       e_len = BN_num_bytes(rsa_e);
       if (e_len > 255)
@@ -2367,11 +2367,7 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
         }
       len = sizeof(khi_context_id);
       RSA_get0_key(hi->rsa, NULL , &rsa_e, NULL);
-      printf("AWWWWWWWWWWWWWWWWWWWWWWWWWWWW %d\n",len);
 
-      if(rsa_e == NULL) 
-         printf("YEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH");
-BN_print_fp(stdout,rsa_e);
       len += BN_num_bytes(rsa_e) + RSA_size(hi->rsa);
 
       if (BN_num_bytes(rsa_e) > 255)
@@ -3173,7 +3169,7 @@ void init_crypto()
   char rnd_seed[20] = {0};
   int i;
 
-  //CHRLI think this is right , CRYPTO_malloc_init() was previous
+  //TODO CHRLI think this is right , CRYPTO_malloc_init() was previous
   OPENSSL_malloc_init();
 
   /* seed the random number generator */
