@@ -1187,6 +1187,59 @@ int read_conf_file(char *filename)
         {
           sscanf(data, "%d", &HCNF.ual);
         }
+      else if (strcmp((char *)node->name, "available_hit_suites") == 0) {
+        done = FALSE;
+        for(child = node->children; child && !done; child = child->next)
+        {
+          if (strcmp((char *)child->name,
+            "suites") == 0)
+          {
+            child = child->children;
+            done = TRUE;
+          }
+        }
+        //15 is the current maximum amount of allowed hit suites.
+        //Should be set in hip_proto.h
+        //But 4 bits without 0000 is the same....
+        //TODO: TDDE21
+        memset(HCNF.hit_suite_list, 0, sizeof(__u8) * HIT_SUITE_4BIT_MAX);
+        int listLocation = 0;
+        for(t = 0; child && (t < HIT_SUITE_4BIT_MAX); child = child->next) {
+          data2 = (char*) xmlNodeGetContent(child);
+          if (strcmp((char *)child->name, "suite") == 0)
+          {
+            sscanf(data2, "%d", &tmp);
+            __u8 suite = 0;
+            switch (tmp)
+            {
+            case 1 :
+              suite = HIT_SUITE_8BIT_RSA_DSA_SHA256;
+              break;
+            case 2 :
+              suite = HIT_SUITE_8BIT_ECDSA_SHA384;
+              break;
+            case 3 :
+              suite = HIT_SUITE_8BIT_ECDSA_LOW_SHA1;
+              break;
+            
+            default:
+              log_ (WARN, "Invalid hit suite id found in config: %d", tmp);
+              break;
+            }
+            if(suite != 0) {
+              HCNF.hit_suite_list[listLocation] = suite;
+              listLocation++;
+            }
+            
+            t++;
+          }
+          printf("Hit suite list\n");
+          for(int i = 0; i < sizeof(HCNF.hit_suite_list); i++) {
+            printf("%d\n", HCNF.hit_suite_list[i]);
+          }
+          xmlFree(data2);
+        }
+      }
       else if ((strcmp((char *)node->name, "hip_sa") == 0) ||
                (strcmp((char *)node->name, "esp_sa") == 0))
         {
