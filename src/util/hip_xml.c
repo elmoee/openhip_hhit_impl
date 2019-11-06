@@ -1213,13 +1213,13 @@ int read_conf_file(char *filename)
             switch (tmp)
             {
             case 1 :
-              suite = HIT_SUITE_8BIT_RSA_DSA_SHA256;
+              suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
               break;
             case 2 :
-              suite = HIT_SUITE_8BIT_ECDSA_SHA384;
+              suite = HIT_SUITE_4BIT_ECDSA_SHA384;
               break;
             case 3 :
-              suite = HIT_SUITE_8BIT_ECDSA_LOW_SHA1;
+              suite = HIT_SUITE_4BIT_ECDSA_LOW_SHA1;
               break;
             
             default:
@@ -1235,7 +1235,7 @@ int read_conf_file(char *filename)
           }
           /* No entries in config */
           if(t == 0) {
-            HCNF.hit_suite_list[0] = HIT_SUITE_8BIT_RSA_DSA_SHA256;
+            HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
           }
           /*printf("Hit suite list\n");
           for(int i = 0; i < sizeof(HCNF.hit_suite_list); i++) {
