@@ -1233,10 +1233,14 @@ int read_conf_file(char *filename)
             
             t++;
           }
-          printf("Hit suite list\n");
+          /* No entries in config */
+          if(t == 0) {
+            HCNF.hit_suite_list[0] = HIT_SUITE_8BIT_RSA_DSA_SHA256;
+          }
+          /*printf("Hit suite list\n");
           for(int i = 0; i < sizeof(HCNF.hit_suite_list); i++) {
             printf("%d\n", HCNF.hit_suite_list[i]);
-          }
+          }*/
           xmlFree(data2);
         }
       }
