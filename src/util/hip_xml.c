@@ -1204,6 +1204,7 @@ int read_conf_file(char *filename)
         //TODO: TDDE21
         memset(HCNF.hit_suite_list, 0, sizeof(__u8) * HIT_SUITE_4BIT_MAX);
         int listLocation = 0;
+        int default_suite = 0;
         for(t = 0; child && (t < HIT_SUITE_4BIT_MAX); child = child->next) {
           data2 = (char*) xmlNodeGetContent(child);
           if (strcmp((char *)child->name, "suite") == 0)
@@ -1214,6 +1215,7 @@ int read_conf_file(char *filename)
             {
             case 1 :
               suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+              default_suite = 1;
               break;
             case 2 :
               suite = HIT_SUITE_4BIT_ECDSA_SHA384;
@@ -1234,14 +1236,28 @@ int read_conf_file(char *filename)
             t++;
           }
           /* No entries in config */
-          if(t == 0) {
+          if(listLocation == 0) {
+            default_suite = 1;
             HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
           }
-          /*printf("Hit suite list\n");
-          for(int i = 0; i < sizeof(HCNF.hit_suite_list); i++) {
-            printf("%d\n", HCNF.hit_suite_list[i]);
-          }*/
+
           xmlFree(data2);
+        }
+        //If the default option has not been added, force it to 
+        //be appended to the end of the list
+        if(default_suite < 1) {
+          if(listLocation > HIT_SUITE_4BIT_MAX - 1) {
+            HCNF.hit_suite_list[HIT_SUITE_4BIT_MAX-1] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+          } 
+          else
+          {
+            HCNF.hit_suite_list[listLocation] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+          }
+          
+        }
+        printf("Hit suite list\n");
+        for(int i = 0; i < sizeof(HCNF.hit_suite_list); i++) {
+          printf("%d\n", HCNF.hit_suite_list[i]);
         }
       }
       else if ((strcmp((char *)node->name, "hip_sa") == 0) ||
