@@ -72,7 +72,8 @@ static __inline unsigned short ip_fast_csum(unsigned char * iph,
   /* one's complement sum 16-bit words of data */
   while (count > 1)
     {
-      sum += *p++;
+      sum += (unsigned char)*p;
+      p++;
       count -= 2;
     }
   /* add left-over byte, if any */
