@@ -908,6 +908,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
       tlv_hit_suite *hit_suite_list = (tlv_hit_suite*) &data[location];
 
       if(handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length) < 0){
+        log_(ERR, "Peer HIT Suites unsupported, aborting base exchange...\n");
         hip_send_notify(hip_a,
                         NOTIFY_UNSUPPORTED_HIT_SUITE,
                         NULL, 0);
