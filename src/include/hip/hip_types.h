@@ -148,6 +148,8 @@
 #define HIP_UPDATE_BIND_CHECKS 5
 #endif
 
+#define MD5_HASH_LENGTH 128
+
 /* Messages from the ESP input/output thread to hipd */
 typedef enum {
   ESP_ACQUIRE_LSI = 1,
@@ -366,6 +368,8 @@ typedef struct _hip_assoc {
   struct rekey_info *peer_rekey;       /* peer's REKEY data from UPDATE */
   struct _tlv_from *from_via;       /* including FROM in I1 or VIA RVS in R1 */
   struct multihoming_info *mh;       /* state for loss multihoming */
+  unsigned char locators_hash[MD5_HASH_LENGTH];          /* md5 hash of last sent locatorset, 
+                                                            used to check for update duplicates */ 
   /* Other crypto */
   __u16 hip_cipher;
   __u16 hip_transform;

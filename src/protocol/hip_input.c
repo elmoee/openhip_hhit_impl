@@ -67,6 +67,7 @@
 #include <openssl/dh.h>         /* Diffie-Hellman contexts      */
 #include <openssl/sha.h>        /* SHA1 algorithms              */
 #include <openssl/rand.h>       /* RAND_bytes()                 */
+#include <openssl/md5.h>        /* MD5 hashing */
 #include <hip/hip_types.h>
 #include <hip/hip_proto.h>
 #include <hip/hip_globals.h>
@@ -4434,6 +4435,17 @@ int handle_locators(hip_assoc *hip_a,
   __u8 *p_addr;
   __u32 spi;
   struct timeval now;
+  unsigned char old_locators_hash[MD5_HASH_LENGTH];
+  unsigned char locators_hash[MD5_HASH_LENGTH];
+
+  memcpy(old_locators_hash, hip_a->locators_hash, MD5_HASH_LENGTH);
+  MD5((const unsigned char*) locators, num*sizeof(locator), locators_hash);
+
+  if (!memcmp(locators_hash, old_locators_hash, MD5_HASH_LENGTH))
+    {
+      log_(WARN, "Warning: Ignoring duplicate locators.\n");
+      return(0);
+    }
 
   memset(&ss_addr, 0, sizeof(struct sockaddr_storage));
   addr = (struct sockaddr*)&ss_addr;
