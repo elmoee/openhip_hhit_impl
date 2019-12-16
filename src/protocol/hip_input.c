@@ -4453,17 +4453,16 @@ int handle_locators(hip_assoc *hip_a,
   gettimeofday(&now, NULL);
 
   loc = NULL;
-  for (i = 0; i < num; i++)
+  for (i = 0; i < num + 1; i++)
     {
-      if (i == num-1)
+      if (i == num)
         {
           loc->traffic_type = LOCATOR_TRAFFIC_TYPE_BOTH;
-          loc->locator_type = LOCATOR_TYPE_IPV6;
-          loc->locator_length = 4;
-          loc->reserved = 0;
+          loc->locator_type = LOCATOR_TYPE_SPI_IPV6;
+          loc->locator_length = 5;
+          loc->reserved = 1;
           loc->locator_lifetime = HCNF.loc_lifetime;
-          /* loc->locator[0] = *src->sa_data; */
-          loc->locator[0] = locators[i-1]->locator[0];
+          memcpy(loc->locator, src->sa_data, 20);
         }
       else
         {
