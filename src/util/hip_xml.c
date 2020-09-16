@@ -770,7 +770,7 @@ void print_hi_to_buff(uint8_t **bufp, int *buf_len, hi_node *hi, int mine)
 
     }
   /* add new output to the buffer */
-  strncat((char *)*bufp, tmp, strnlen(tmp, sizeof(tmp) - 1));
+  strncat((char *)*bufp, tmp, *buf_len - strlen((char *)*bufp) - 1);
 }
 
 
@@ -1115,7 +1115,7 @@ int read_conf_file(char *filename)
       else if (strcmp((char *)node->name, "preferred_hi") == 0)
         {
           HCNF.preferred_hi = (char *)malloc(MAX_HI_NAMESIZE);
-          strncpy(HCNF.preferred_hi, data, MAX_HI_NAMESIZE);
+          strncpy(HCNF.preferred_hi, data, MAX_HI_NAMESIZE - 1);
         }
       else if (strcmp((char *)node->name, "send_hi_name") == 0)
         {

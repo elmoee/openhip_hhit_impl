@@ -673,8 +673,11 @@ int main(int argc, char *argv[])
       else if (strcmp(*argv, "-name") == 0)
         {
           argv++, argc--;
-          strncpy(basename, *argv, sizeof(basename));
-          argv++, argc--;
+          if (argc > 0)
+          {
+            strncpy(basename, *argv, sizeof(basename) - 1);
+            argv++, argc--;
+          }
           continue;
         }
       else if (strcmp(*argv, "-type") == 0)
@@ -792,7 +795,11 @@ int main(int argc, char *argv[])
     {
       if (!have_filename)
         {
-          sprintf(filename, "%s%s%s", HIP_PUB_PREFIX, basename,
+          char basename_truncated[255 - sizeof(HIP_PUB_PREFIX) - sizeof(HIP_PUB_SUFFIX) - 1];
+          memcpy(basename_truncated, basename, sizeof(basename_truncated) - 1);
+          basename_truncated[sizeof(basename_truncated) - 1] = '\0';
+
+          sprintf(filename, "%s%s%s", HIP_PUB_PREFIX, basename_truncated,
                   HIP_PUB_SUFFIX);
         }
       publish_hits(filename);
