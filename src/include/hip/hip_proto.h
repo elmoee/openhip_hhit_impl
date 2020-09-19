@@ -159,7 +159,7 @@ typedef enum {
   HIP_CIPHER_AES128_CBC,                /* 2 */
   HIP_CIPHER_RESERVED_2,                /* 3 */
   HIP_CIPHER_AES256_CBC,                /* 4 */
-  HIP_CIPHER_RESERVED_2,                /* 5 */
+  HIP_CIPHER_RESERVED_3,                /* 5 */
   HIP_CIPHER_RIVER_KEYAK,               /* 6 */
   HIP_CIPHER_LAKE_KEYAK,                /* 7 */
   HIP_CIPHER_MAX,                       /* 8 */

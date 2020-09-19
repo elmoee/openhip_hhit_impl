@@ -1696,7 +1696,8 @@ __u32 receive_hip_dns_response(unsigned char *buff, int len)
             {
               name_len = MAX_HI_NAMESIZE - 1;
             }
-          strncpy(hi->name, name, name_len - 1);
+          memcpy(hi->name, name, name_len - 1);
+          hi->name[strnlen(name, name_len - 1)] = '\0';
           hi->name_len = name_len;
           p += pk_len;
           if (!validate_hit(hi->hit, hi))
