@@ -159,7 +159,10 @@ typedef enum {
   HIP_CIPHER_AES128_CBC,                /* 2 */
   HIP_CIPHER_RESERVED_2,                /* 3 */
   HIP_CIPHER_AES256_CBC,                /* 4 */
-  HIP_CIPHER_MAX,                       /* 5 */
+  HIP_CIPHER_RESERVED_2,                /* 5 */
+  HIP_CIPHER_RIVER_KEYAK,               /* 6 */
+  HIP_CIPHER_LAKE_KEYAK,                /* 7 */
+  HIP_CIPHER_MAX,                       /* 8 */
 } CIPHER_IDS;
 
 /* HIT suites (8 bit encoding) */
@@ -168,6 +171,7 @@ typedef enum {
   HIT_SUITE_8BIT_RSA_DSA_SHA256 = 0x10,
   HIT_SUITE_8BIT_ECDSA_SHA384 = 0x20,
   HIT_SUITE_8BIT_ECDSA_LOW_SHA1 = 0x30,
+  HIT_SUITE_8BIT_EDDSA_CSHAKE128 = 0x50,
 } HIT_SUITES_8BIT;
 
 /* HIT suites (4 bit encoding) */
@@ -176,6 +180,8 @@ typedef enum {
   HIT_SUITE_4BIT_RSA_DSA_SHA256,
   HIT_SUITE_4BIT_ECDSA_SHA384,
   HIT_SUITE_4BIT_ECDSA_LOW_SHA1,
+  HIT_SUITE_4BIT_RESERVED_2,
+  HIT_SUITE_4BIT_EDDSA_CSHAKE128,
   HIT_SUITE_4BIT_MAX,
 } HIT_SUITES_4BIT;
 
@@ -214,6 +220,7 @@ typedef enum {
   HI_ALG_RSA = 5,
   HI_ALG_ECDSA = 7,
   HI_ALG_ECDSA_LOW = 9,
+  HI_ALG_EDDSA = 13,
 } HI_ALGORITHMS;
 #define HIP_RSA_DFT_EXP RSA_F4 /* 0x10001L = 65537; 3 and 17 are also common */
 #define HI_TYPESTR(a)  ((a == HI_ALG_DSA) ? "DSA" : \
@@ -288,6 +295,9 @@ typedef enum {
   DH_NIST_521,
   DH_SECP160R1,
   DH_MODP_2048,
+  DH_RESERVED_2,
+  DH_CURVE_25519,
+  DH_CURVE_448,
   DH_MAX
 } DH_GROUP_IDS;
 
@@ -298,6 +308,16 @@ typedef enum {
   ECDSA_384,
   ECDSA_MAX
 } ECDSA_CURVE_IDS;
+
+/* EDDSA curve IDs*/
+typedef enum {
+  EDDSA_RESERVED,
+  EDDSA_25519,
+  EDDSA_25519PH,
+  EDDSA_448,
+  EDDSA_448PH,
+  EDDSA_MAX
+} EDDSA_CURVE_IDS;
 
 /* choose default DH group here */
 #define DEFAULT_DH_GROUP_ID  DH_MODP_1536
