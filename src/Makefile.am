@@ -49,6 +49,10 @@ SRC_HITGEN = 	util/hitgen.c util/hip_util.c protocol/hip_globals.c
 
 hitgen_CFLAGS =	-DHITGEN
 
+# XKCP library source files
+SRC_XKCP = 	lib/src/XKCP/Keyakv2.c lib/src/XKCP/SP800-185.c lib/src/XKCP/KeccakSponge.c \
+			lib/src/XKCP/KeccakP-800-compact.c lib/src/XKCP/KeccakP-1600-compact64.c
+
 # Usermode version
 hip_CFLAGS =	
 SRC_USERMODE =	usermode/hip_umh_main.c \
@@ -66,7 +70,7 @@ hipstatus_CFLAGS = -D__MACOSX__
 SRC_USERMODE += mac/hip_mac.c
 endif
 
-INCLUDES = -I./include @libxml2_CFLAGS@
+INCLUDES = -I./include -I./lib/include @libxml2_CFLAGS@
 LDADD = @libxml2_LIBS@ -lz -ldl
 
 # VPLS support
@@ -77,8 +81,8 @@ SUBDIRS = util
 endif
 
 # different targets
-hitgen_SOURCES = $(SRC_HITGEN)
-hip_SOURCES = 	$(SRC_HIP) $(SRC_PROTO) $(SRC_UTIL) $(SRC_USERMODE)
+hitgen_SOURCES = $(SRC_HITGEN) $(SRC_XKCP)
+hip_SOURCES = 	$(SRC_HIP) $(SRC_PROTO) $(SRC_UTIL) $(SRC_USERMODE) $(SRC_XKCP)
 hipstatus_SOURCES = util/usermode-status.c
 
 AM_COLOR_TESTS=always
