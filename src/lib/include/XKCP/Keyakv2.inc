@@ -54,18 +54,18 @@ int Keyak_Initialize(Keyak_Instance *instance,
 }
 
 int Keyak_Wrap(Keyak_Instance *instance, const unsigned char *input, unsigned char *output, size_t dataSizeInBytes,
-        const unsigned char * AD, size_t ADlen, unsigned char * tag, int unwrapFlag, int forgetFlag )
+        const unsigned char * AD, size_t ADlen, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag )
 {
     size_t  processedI, processedMD;
 
-    return ( Motorist_Wrap( &instance->motorist, input, dataSizeInBytes, output, AD, ADlen, tag, unwrapFlag, forgetFlag, Motorist_Wrap_LastCryptAndMeta, &processedI, &processedMD ) );
+    return ( Motorist_Wrap( &instance->motorist, input, dataSizeInBytes, output, AD, ADlen, tagFlag, tag, unwrapFlag, forgetFlag, Motorist_Wrap_LastCryptAndMeta, &processedI, &processedMD ) );
 }
 
 int Keyak_WrapPartial( Keyak_Instance *instance, const unsigned char *input, unsigned char *output, size_t dataSizeInBytes,
-        const unsigned char * AD, size_t ADlen, unsigned char * tag, int unwrapFlag, int forgetFlag,
+        const unsigned char * AD, size_t ADlen, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag,
         int lastFlags, size_t *processedIlen, size_t *processedAlen)
 {
-    return ( Motorist_Wrap( &instance->motorist, input, dataSizeInBytes, output, AD, ADlen, tag, unwrapFlag, forgetFlag, lastFlags, processedIlen, processedAlen ) );
+    return ( Motorist_Wrap( &instance->motorist, input, dataSizeInBytes, output, AD, ADlen, tagFlag, tag, unwrapFlag, forgetFlag, lastFlags, processedIlen, processedAlen ) );
 }
 
 #undef Keyak_Instance

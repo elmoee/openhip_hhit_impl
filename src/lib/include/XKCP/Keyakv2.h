@@ -103,7 +103,7 @@ http://creativecommons.org/publicdomain/zero/1.0/
 #define XKCP_DeclareMotoristFunctions(prefix) \
     int prefix##_Motorist_Initialize(prefix##_Motorist_Instance *instance); \
     int prefix##_Motorist_StartEngine(prefix##_Motorist_Instance *instance, const unsigned char * SUV, size_t SUVlen, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag); \
-    int prefix##_Motorist_Wrap(prefix##_Motorist_Instance *instance, const unsigned char *input, size_t dataSizeInBytes, unsigned char *output, const unsigned char * AD, size_t ADlen, unsigned char * tag, int unwrapFlag, int forgetFlag, int lastFlags, size_t *processedIlen, size_t *processedAlen);
+    int prefix##_Motorist_Wrap(prefix##_Motorist_Instance *instance, const unsigned char *input, size_t dataSizeInBytes, unsigned char *output, const unsigned char * AD, size_t ADlen, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag, int lastFlags, size_t *processedIlen, size_t *processedAlen);
 
 /* ------------------------------------------------------------------------ */
 
@@ -114,8 +114,8 @@ http://creativecommons.org/publicdomain/zero/1.0/
 
 #define XKCP_DeclareKeyakFunctions(prefix) \
     int prefix##Keyak_Initialize(prefix##Keyak_Instance *instance, const unsigned char *key, unsigned int keySizeInBytes, const unsigned char *nonce, unsigned int nonceSizeInBytes, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag); \
-    int prefix##Keyak_Wrap(prefix##Keyak_Instance *instance, const unsigned char *input, unsigned char *output, size_t dataSizeInBytes, const unsigned char * AD, size_t ADlen, unsigned char * tag, int unwrapFlag, int forgetFlag ); \
-    int prefix##Keyak_WrapPartial(prefix##Keyak_Instance *instance, const unsigned char *input, unsigned char *output, size_t dataSizeInBytes, const unsigned char * AD, size_t ADlen, unsigned char * tag, int unwrapFlag, int forgetFlag, int lastFlags, size_t *processedIlen, size_t *processedAlen);
+    int prefix##Keyak_Wrap(prefix##Keyak_Instance *instance, const unsigned char *input, unsigned char *output, size_t dataSizeInBytes, const unsigned char * AD, size_t ADlen, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag ); \
+    int prefix##Keyak_WrapPartial(prefix##Keyak_Instance *instance, const unsigned char *input, unsigned char *output, size_t dataSizeInBytes, const unsigned char * AD, size_t ADlen, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag, int lastFlags, size_t *processedIlen, size_t *processedAlen);
 
 /* ------------------------------------------------------------------------ */
 

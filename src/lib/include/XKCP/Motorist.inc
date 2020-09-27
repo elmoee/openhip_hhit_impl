@@ -704,7 +704,7 @@ int Motorist_StartEngine(Motorist_Instance *instance, const unsigned char * SUV,
 
 
 int Motorist_Wrap(Motorist_Instance *instance, const unsigned char * I, size_t Ilen, unsigned char *O, 
-    const unsigned char * A, size_t Alen, unsigned char * tag, int unwrapFlag, int forgetFlag,
+    const unsigned char * A, size_t Alen, int tagFlag, unsigned char * tag, int unwrapFlag, int forgetFlag,
     int lastFlag, size_t *processedIlen, size_t *processedAlen)
 {
     int             resultI;
@@ -893,7 +893,7 @@ int Motorist_Wrap(Motorist_Instance *instance, const unsigned char * I, size_t I
         #endif
             if ( Motorist_MakeKnot(instance) < 0 )
                     return ( Atom_Error );
-        resultI = Motorist_HandleTag(instance, Atom_True, tag, unwrapFlag );
+        resultI = Motorist_HandleTag(instance, tagFlag, tag, unwrapFlag );
         if ( resultI != Atom_True )
             memset( initialO, 0, initialOlen );
         return ( resultI );
