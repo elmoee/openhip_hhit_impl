@@ -279,6 +279,8 @@ typedef enum {
   KEY_LEN_AES128 = 16,          /* 128 bits per RFC 3686; also 192, 256-bits */
   KEY_LEN_AES256 = 32,          /* 256 bits */
   KEY_LEN_BLOWFISH = 16,        /* 128 bits per RFC 2451 */
+  KEY_LEN_RIVER_KEYAK = 32,     /* 256 bits TODO: Determine proper values for Keyak key length */
+  KEY_LEN_LAKE_KEYAK = 32,      /* 256 bits TODO: Determine proper values for Keyak key length */
 } HIP_KEYLENS;
 
 /* Diffie-Hellman Group IDs */

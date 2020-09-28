@@ -73,6 +73,7 @@
 #include <hip/hip_globals.h>
 #include <hip/hip_funcs.h>
 #include <openssl/x509.h>
+#include "XKCP/Keyakv2.h"
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -656,6 +657,90 @@ int hip_send_I2(hip_assoc *hip_a)
                       cbc_iv, AES_ENCRYPT);
       memcpy(enc->iv + iv_len, enc_data, data_len);
       break;
+    case HIP_CIPHER_RIVER_KEYAK:
+    {
+      /* do River Keyak encryption */
+      RiverKeyak_Instance rk_inst;
+      memset(&rk_inst, 0, sizeof(rk_inst));
+      // Must be provided to Keyak_Wrap, unused for now
+      unsigned char rk_tag[16];
+      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
+      len = enc_key_len_hip_cipher(hip_a->hip_cipher);
+      log_(NORM, "River Keyak encryption key: 0x");
+      print_hex(key, len);
+      log_(NORM, "\n");
+
+      if ((err = RiverKeyak_Initialize(&rk_inst,
+                                       key,
+                                       len,
+                                       cbc_iv,
+                                       sizeof(cbc_iv),
+                                       FALSE,
+                                       NULL,
+                                       FALSE,
+                                       TRUE)) != 1)
+      {
+        log_(WARN, "Unable to use calculated DH secret for River Keyak key (%d)\n", err);
+        free(unenc_data);
+        free(enc_data);
+        return (-1);
+      }
+      log_(NORM, "Encrypting %d bytes using River Keyak.\n", data_len);
+      RiverKeyak_Wrap(&rk_inst,
+                      unenc_data,
+                      enc_data,
+                      data_len,
+                      NULL,
+                      0,
+                      FALSE,
+                      rk_tag,
+                      FALSE,
+                      TRUE);
+      memcpy(enc->iv + iv_len, enc_data, data_len);
+      break;
+    }
+    case HIP_CIPHER_LAKE_KEYAK:
+    {
+      /* do Lake Keyak encryption */
+      LakeKeyak_Instance lk_inst;
+      memset(&lk_inst, 0, sizeof(lk_inst));
+      // Must be provided to Keyak_Wrap, unused for now
+      unsigned char lk_tag[16];
+      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
+      len = enc_key_len_hip_cipher(hip_a->hip_cipher);
+      log_(NORM, "Lake Keyak encryption key: 0x");
+      print_hex(key, len);
+      log_(NORM, "\n");
+
+      if ((err = LakeKeyak_Initialize(&lk_inst,
+                                      key,
+                                      len,
+                                      cbc_iv,
+                                      sizeof(cbc_iv),
+                                      FALSE,
+                                      NULL,
+                                      FALSE,
+                                      TRUE)) != 1)
+      {
+        log_(WARN, "Unable to use calculated DH secret for Lake Keyak key (%d)\n", err);
+        free(unenc_data);
+        free(enc_data);
+        return (-1);
+      }
+      log_(NORM, "Encrypting %d bytes using Lake Keyak.\n", data_len);
+      LakeKeyak_Wrap(&lk_inst,
+                     unenc_data,
+                     enc_data,
+                     data_len,
+                     NULL,
+                     0,
+                     FALSE,
+                     lk_tag,
+                     FALSE,
+                     TRUE);
+      memcpy(enc->iv + iv_len, enc_data, data_len);
+      break;
+    }
     }
   /* this is type + length + reserved + iv + data_len */
   location += 4 + 4 + iv_len + data_len;

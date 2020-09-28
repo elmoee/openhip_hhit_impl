@@ -452,6 +452,10 @@ int enc_key_len_hip_cipher(int hip_cipher_id)
       return(KEY_LEN_AES256);
     case HIP_CIPHER_NULL_ENCRYPT:
       return(KEY_LEN_NULL);
+    case HIP_CIPHER_RIVER_KEYAK:
+      return(KEY_LEN_RIVER_KEYAK);
+    case HIP_CIPHER_LAKE_KEYAK:
+      return(KEY_LEN_LAKE_KEYAK);
     default:
       break;
   }
@@ -467,6 +471,10 @@ int enc_iv_len(int hip_cipher_id)
       return(16);               /* AES uses 128-bit IV */
     case HIP_CIPHER_NULL_ENCRYPT:
       return(0);
+    case HIP_CIPHER_RIVER_KEYAK:
+    case HIP_CIPHER_LAKE_KEYAK:
+      return(16); // 128 bits TODO: Determine correct value for Keyak IV length
+    break;
     default:
       break;
     }

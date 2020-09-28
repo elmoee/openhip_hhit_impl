@@ -75,6 +75,7 @@
 #include <hip/hip_sadb.h>
 #include <stdbool.h>
 #include <openssl/x509.h>
+#include "XKCP/Keyakv2.h"
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -1419,6 +1420,88 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
                                   cbc_iv,
                                   AES_DECRYPT);
                   break;
+                case HIP_CIPHER_RIVER_KEYAK:
+                {
+                  RiverKeyak_Instance rk_inst;
+                  memset(&rk_inst, 0, sizeof(rk_inst));
+                  // Must be provided to Keyak_Wrap, unused for now
+                  unsigned char rk_tag[16] = {0};
+
+                  log_(NORM, "River Keyak decryption key: 0x");
+                  print_hex(key, key_len);
+                  log_(NORM, "\n");
+                  if (!RiverKeyak_Initialize(&rk_inst,
+                                             key,
+                                             key_len,
+                                             cbc_iv,
+                                             sizeof(cbc_iv),
+                                             false,
+                                             NULL,
+                                             false,
+                                             true))
+                  {
+                    log_(WARN, "Unable to use calulated DH secret for River Keyak key.\n");
+                    err = NOTIFY_ENCRYPTION_FAILED;
+                    goto I2_ERROR;
+                  }
+                  log_(NORM, "Decrypting %d bytes using River Keyak.\n", len);
+                  int decrypt_err = RiverKeyak_Wrap(&rk_inst,
+                                                    enc_data,
+                                                    unenc_data,
+                                                    len,
+                                                    NULL,
+                                                    0,
+                                                    false,
+                                                    rk_tag,
+                                                    true,
+                                                    true);
+                  if (decrypt_err == -1)
+                    log_(NORM, "Failed to decrypt data using River Keyak.\n");
+                  else if (decrypt_err == 0)
+                    log_(NORM, "Tag check failed when decrypting data using River Keyak.\n");
+                  break;
+                }
+                case HIP_CIPHER_LAKE_KEYAK:
+                {
+                  LakeKeyak_Instance lk_inst;
+                  memset(&lk_inst, 0, sizeof(lk_inst));
+                  // Must be provided to Keyak_Wrap, unused for now
+                  unsigned char lk_tag[16] = {0};
+
+                  log_(NORM, "Lake Keyak decryption key: 0x");
+                  print_hex(key, key_len);
+                  log_(NORM, "\n");
+                  if (!LakeKeyak_Initialize(&lk_inst,
+                                            key,
+                                            key_len,
+                                            cbc_iv,
+                                            sizeof(cbc_iv),
+                                            false,
+                                            NULL,
+                                            false,
+                                            true))
+                  {
+                    log_(WARN, "Unable to use calulated DH secret for Lake Keyak key.\n");
+                    err = NOTIFY_ENCRYPTION_FAILED;
+                    goto I2_ERROR;
+                  }
+                  log_(NORM, "Decrypting %d bytes using Lake Keyak.\n", len);
+                  int decrypt_err = LakeKeyak_Wrap(&lk_inst,
+                                                   enc_data,
+                                                   unenc_data,
+                                                   len,
+                                                   NULL,
+                                                   0,
+                                                   false,
+                                                   lk_tag,
+                                                   true,
+                                                   true);
+                  if (decrypt_err == -1)
+                    log_(NORM, "Failed to decrypt data using Lake Keyak.\n");
+                  else if (decrypt_err == 0)
+                    log_(NORM, "Tag check failed when decrypting data using Lake Keyak.\n");
+                  break;
+                }
                 default:
                   log_(WARN, "Unsupported transform ");
                   log_(NORM, "for decryption\n");

@@ -190,8 +190,10 @@ int main_loop(int argc, char **argv)
   HCNF.dh_group = 0;
   HCNF.dh_group_list[0] = DH_SECP160R1;
   HCNF.dh_group_list[1] = DH_MODP_1536;
-  HCNF.hip_ciphers[0] = HIP_CIPHER_AES128_CBC;
-  HCNF.hip_ciphers[1] = HIP_CIPHER_AES256_CBC;
+  HCNF.hip_ciphers[0] = HIP_CIPHER_RIVER_KEYAK;
+  HCNF.hip_ciphers[1] = HIP_CIPHER_LAKE_KEYAK;
+  HCNF.hip_ciphers[2] = HIP_CIPHER_AES128_CBC;
+  HCNF.hip_ciphers[3] = HIP_CIPHER_AES256_CBC;
   //HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
   //HCNF.hit_suite_list[1] = HIT_SUITE_4BIT_ECDSA_SHA384;
   //HCNF.hit_suite_list[2] = HIT_SUITE_4BIT_ECDSA_LOW_SHA1;
