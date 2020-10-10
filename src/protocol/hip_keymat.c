@@ -42,6 +42,8 @@
 #include <hip/hip_funcs.h>
 #include <hip/hip_sadb.h>
 
+#include "XKCP/SP800-185.h"
+
 #define MAX_KEYS 8
 
 /*
@@ -219,36 +221,86 @@ int compute_keymat(hip_assoc *hip_a)
   memcpy(salt, hip_a->cookie_r.i, sizeof(__u64));
   memcpy(&salt[sizeof(__u64)], hip_a->cookie_j, sizeof(__u64));
 
-  EVP_PKEY_CTX *pctx;
-  pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
+  // EDDSA/cSHAKE128 uses KKDF instead of HKDF
+  switch (hip_a->hit_suite)
+  {
+  case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+  {
+    size_t initiatorPubkeyLen = 0;
+    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, NULL, &initiatorPubkeyLen);
+    unsigned char *initiatorPubKeyBuffer = malloc(initiatorPubkeyLen);
+    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, initiatorPubKeyBuffer, &initiatorPubkeyLen);
 
-  if (EVP_PKEY_derive_init(pctx) <= 0) {
-    log_(ERR, "HKDF init failed\n");
-    return -1;
-  }
+    size_t responderPubkeyLen = 0;
+    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, NULL, &responderPubkeyLen);
+    unsigned char *responderPubKeyBuffer = malloc(responderPubkeyLen);
+    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, responderPubKeyBuffer, &responderPubkeyLen);
 
-  if (EVP_PKEY_CTX_set_hkdf_md(pctx, get_hkdf_md(hip_a)) <= 0) {
-    log_(ERR, "HKDF message digest init failed\n");
-    return -1;
-  }
+    unsigned char *kmacKey = malloc(info_len + salt_len);
+    memcpy(kmacKey, salt, salt_len);
+    memcpy(&kmacKey[salt_len], info, info_len);
 
-  if (EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, salt_len) <= 0) {
-    log_(ERR, "HKDF salt init failed\n");
-    return -1;
+    size_t ikmLen = hip_a->dh_secret_len + initiatorPubkeyLen + responderPubkeyLen;
+    unsigned char *ikm = malloc(ikmLen);
+
+    memcpy(ikm, dh_secret, dh_secret_len);
+    memcpy(&ikm[dh_secret_len], initiatorPubKeyBuffer, initiatorPubkeyLen);
+    memcpy(&ikm[dh_secret_len + initiatorPubkeyLen], responderPubKeyBuffer, responderPubkeyLen);
+
+    KMAC128(kmacKey, (salt_len + info_len) * 8, ikm, ikmLen, hip_a->keymat, keymat_len, (unsigned char *)"KDF", 8 * 3);
+
+    free(initiatorPubKeyBuffer);
+    free(responderPubKeyBuffer);
+    free(kmacKey);
+    free(ikm);
   }
-  if (EVP_PKEY_CTX_set1_hkdf_key(pctx, dh_secret, dh_secret_len) <= 0) {
-    log_(ERR, "HKDF dh secret init failed\n");
-    return -1;
+  break;
+  case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+  case HIT_SUITE_4BIT_ECDSA_SHA384:
+  case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+  {
+    EVP_PKEY_CTX *pctx;
+    pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, NULL);
+
+    if (EVP_PKEY_derive_init(pctx) <= 0)
+    {
+      log_(ERR, "HKDF init failed\n");
+      return -1;
+    }
+
+    if (EVP_PKEY_CTX_set_hkdf_md(pctx, get_hkdf_md(hip_a)) <= 0)
+    {
+      log_(ERR, "HKDF message digest init failed\n");
+      return -1;
+    }
+
+    if (EVP_PKEY_CTX_set1_hkdf_salt(pctx, salt, salt_len) <= 0)
+    {
+      log_(ERR, "HKDF salt init failed\n");
+      return -1;
+    }
+    if (EVP_PKEY_CTX_set1_hkdf_key(pctx, dh_secret, dh_secret_len) <= 0)
+    {
+      log_(ERR, "HKDF dh secret init failed\n");
+      return -1;
+    }
+    if (EVP_PKEY_CTX_add1_hkdf_info(pctx, info, info_len) <= 0)
+    {
+      log_(ERR, "HKDF info init failed\n");
+      return -1;
+    }
+    /* EXTRACT_AND_EXPAND is the default behaviour, 
+        thus filling the keymat buffer with esp keys. */
+    if (EVP_PKEY_derive(pctx, hip_a->keymat, &keymat_len) <= 0)
+    {
+      log_(ERR, "HKDF failed to derive keys\n");
+      return -1;
+    }
+    break;
+  default:
+    log_(WARN, "Unsupported HIT suite in compute_keymat(): %d.\n",
+         hip_a->hit_suite);
   }
-  if (EVP_PKEY_CTX_add1_hkdf_info(pctx, info, info_len) <= 0) {
-    log_(ERR, "HKDF info init failed\n");
-    return -1;
-  }
-  /* EXTRACT_AND_EXPAND is the default behaviour, 
-     thus filling the keymat buffer with esp keys. */
-  if (EVP_PKEY_derive(pctx, hip_a->keymat, &keymat_len) <= 0) {
-    log_(ERR, "HKDF failed to derive keys\n");
-    return -1;
   }
 
   free(info);
