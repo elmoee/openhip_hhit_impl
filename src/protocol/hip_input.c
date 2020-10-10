@@ -1004,6 +1004,7 @@ int handle_hit_suite_list(hip_assoc *hip_a, __u8 *id, __u16 length) {
       /* Right shift to convert from 8bit to 4bit. */
       if((*i >> 4) == HCNF.hit_suite_list[j]){
         hip_a->hit_suite = (*i >> 4);
+        hip_a->peer_hi->hit_suite_id = hip_a->hit_suite;
         return(0);
       }
     }
