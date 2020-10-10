@@ -114,6 +114,8 @@
 #define HIP_ECDSA384_SIG_PARAM_SIZE (HIP_ECDSA384_SIG_SIZE - 1) / 2
 #define HIP_ECDSA_LOW_SIG_SIZE 21
 #define HIP_ECDSA_LOW_SIG_PARAM_SIZE (HIP_ECDSA_LOW_SIG_SIZE - 1) / 2
+#define HIP_EDDSA25519_SIG_SIZE 64
+#define HIP_EDDSA448_SIG_SIZE 114
 #define MAX_SIG_SIZE 512 /* RFC 3110 4096-bits max RSA length */
 #define NUMKEYS 8 /* HIP, HMAC, HIP, HMAC, ESP, AUTH, ESP, AUTH */
 #define KEYMAT_SIZE (4 * NUMKEYS * HIP_KEY_SIZE) /* 768 bytes, enough space for
@@ -494,6 +496,7 @@ typedef struct _hi_node {
   RSA *rsa;                     /* HI in RSA format			*/
   EC_KEY *ecdsa;                /* HI in ECDSA format			*/
   EC_KEY *ecdsa_low;            /* HI in ECDSA_LOW format			*/
+  EVP_PKEY *eddsa;          /* HI in EDDSA format			*/
   struct _r1_cache_entry r1_cache [DH_MAX][R1_CACHE_SIZE];       /* the R1 cache	*/
   __u64 r1_gen_count;           /* R1 generation counter		*/
   __u32 update_id;              /* this host's Update ID		*/

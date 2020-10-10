@@ -226,7 +226,8 @@ typedef enum {
 #define HI_TYPESTR(a)  ((a == HI_ALG_DSA) ? "DSA" : \
                         (a == HI_ALG_RSA) ? "RSA" : \
                         (a == HI_ALG_ECDSA) ? "ECDSA" : \
-                        (a == HI_ALG_ECDSA_LOW) ? "ECDSA_LOW" : "UNKNOWN")
+                        (a == HI_ALG_ECDSA_LOW) ? "ECDSA_LOW" : \
+                        (a == HI_ALG_EDDSA) ? "EdDSA" : "UNKNOWN")
 
 /* SADB algorithms */
 #define SADB_EALG_3DESCBC         3
@@ -275,6 +276,7 @@ typedef enum {
   KEY_LEN_SHA1 = 20,            /* 160 bits per RFC 2404 */
   KEY_LEN_SHA256 = 32,
   KEY_LEN_SHA384 = 48,
+  KEY_LEN_CSHAKE128 = 32,       /* 256 bits per Internet-Draft draft-moskowitz-hip-new-crypto-05 */
   KEY_LEN_3DES = 24,            /* 192 bits (3x64-bit keys) RFC 2451 */
   KEY_LEN_AES128 = 16,          /* 128 bits per RFC 3686; also 192, 256-bits */
   KEY_LEN_AES256 = 32,          /* 256 bits */

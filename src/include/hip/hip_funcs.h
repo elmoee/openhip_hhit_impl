@@ -234,6 +234,7 @@ int maxof(int num_args, ...);
 int hip_header_offset(const __u8 *data);
 int udp_header_offset(const __u8 *data);
 int ECDSA_get_curve_id(const EC_KEY * ecdsa);
+int EdDSA_get_curve_id(EVP_PKEY * eddsa);
 __u16 checksum_udp_packet(__u8 *data,
                           struct sockaddr *src,
                           struct sockaddr *dst);

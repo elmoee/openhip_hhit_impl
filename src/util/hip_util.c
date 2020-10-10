@@ -3493,6 +3493,18 @@ int ECDSA_get_curve_id(const EC_KEY * ecdsa){
 }
 
 /*
+ * Return the id for the EdDSA-type,
+ * return -1 if not found.
+ */
+int EdDSA_get_curve_id(EVP_PKEY * eddsa){
+  int curve_name = EVP_PKEY_base_id(eddsa);
+  for (int i = 0; i < EDDSA_MAX; ++i){
+    if (EdDSA_curve_nid[i] == curve_name) return i;
+  }
+  return -1;
+}
+
+/*
  * function bn2bin_safe(BIGNUM *dest)
  *
  * BN_bin2bn() chops off the leading zero(es) of the BIGNUM,
