@@ -51,7 +51,8 @@ hitgen_CFLAGS =	-DHITGEN
 
 # XKCP library source files
 SRC_XKCP = 	lib/src/XKCP/Keyakv2.c lib/src/XKCP/SP800-185.c lib/src/XKCP/KeccakSponge.c \
-			lib/src/XKCP/KeccakP-800-compact.c lib/src/XKCP/KeccakP-1600-compact64.c
+			lib/src/XKCP/KeccakP-800-compact.c lib/src/XKCP/KeccakP-1600-compact64.c \
+			lib/src/XKCP/SimpleFIPS202.c
 
 # Usermode version
 hip_CFLAGS =	
