@@ -396,18 +396,49 @@ dh_cache_entry *new_dh_cache_entry(__u8 group_id)
   entry->is_current = TRUE;
   entry->ref_count  = 0;
   if(ec_curve_nid[group_id]) { // check if eliptic curve diffie-hellman
-    EC_GROUP *ec_group;
-    EC_KEY   *ec_key = EC_KEY_new();
-    ec_group = EC_GROUP_new_by_curve_name(ec_curve_nid[group_id]);
-    EC_KEY_set_group(ec_key, ec_group);
-    if ( EC_KEY_generate_key(ec_key) != 1)
-    {
-      log_(ERR, "ECDH key generation failed.\n");
-      log_(NORMT, "ECDH key generation failed.\n");
-      exit(1);
-    }
 
-    EVP_PKEY_assign_EC_KEY(entry->evp_dh,ec_key);
+    switch (group_id)
+    {
+    case DH_MODP_1536:
+    case DH_MODP_3072:
+    case DH_DEPRECATED3:
+    case DH_DEPRECATED4:
+    case DH_NIST_256:
+    case DH_NIST_384:
+    case DH_NIST_521:
+    case DH_SECP160R1:
+    case DH_MODP_2048:
+    {
+      EC_GROUP *ec_group;
+      EC_KEY *ec_key = EC_KEY_new();
+      ec_group = EC_GROUP_new_by_curve_name(ec_curve_nid[group_id]);
+      EC_KEY_set_group(ec_key, ec_group);
+      if (EC_KEY_generate_key(ec_key) != 1)
+      {
+        log_(ERR, "ECDH key generation failed.\n");
+        log_(NORMT, "ECDH key generation failed.\n");
+        exit(1);
+      }
+
+      EVP_PKEY_assign_EC_KEY(entry->evp_dh, ec_key);
+    }
+    break;
+    case DH_CURVE_25519:
+    case DH_CURVE_448:
+    {
+      EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(ec_curve_nid[group_id], NULL);
+      EVP_PKEY_keygen_init(pctx);
+      int err = EVP_PKEY_keygen(pctx, &entry->evp_dh);
+      EVP_PKEY_CTX_free(pctx);
+      if (err != 1)
+      {
+        log_(ERR, "ECDH key generation failed.\n");
+        log_(NORMT, "ECDH key generation failed.\n");
+        exit(1);
+      }
+    }
+    break;
+    }
   }
   else
   {

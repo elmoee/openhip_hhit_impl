@@ -74,6 +74,8 @@
 #include <hip/hip_funcs.h>
 #include <openssl/x509.h>
 #include "XKCP/Keyakv2.h"
+#include "XKCP/SP800-185.h"
+#include "XKCP/SimpleFIPS202.h"
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -1408,18 +1410,42 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
               hmac_md, &hmac_md_len  );
       break;
 
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+    {
+      const unsigned char customization[] = "";
+      KMAC128(get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len(hip_a->hip_transform) * 8,
+              (__u8 *)&ticket->hmac_key_index,
+              length_to_hmac * 8,
+              hmac_md, sizeof(ticket->hmac) * 8,
+              customization, 0);
+      hmac_md_len = 256 / 8;
+      break;
+    }
     default:
       return(0);
       break;
     }
 
-  /* get lower 160-bits of HMAC computation */
-  memcpy( ticket->hmac,
-          &hmac_md[hmac_md_len - sizeof(ticket->hmac)],
-          sizeof(ticket->hmac));
 
   location += sizeof(tlv_proxy_ticket);
   location = eight_byte_align(location);
+
+  switch (hip_a->hit_suite)
+  {
+  case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+  case HIT_SUITE_4BIT_ECDSA_SHA384:
+  case HIT_SUITE_4BIT_RESERVED:
+  case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+    /* get lower 160-bits of HMAC computation */
+    memcpy(ticket->hmac,
+           &hmac_md[hmac_md_len - sizeof(ticket->hmac)],
+           sizeof(ticket->hmac));
+
+    break;
+  case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+    memcpy(ticket->hmac, hmac_md, sizeof(ticket->hmac));
+  }
 
   /* HMAC */
   hiph->hdr_len = (location / 8) - 1;
@@ -2199,6 +2225,27 @@ int build_tlv_hostid_len(hi_node *hi, int use_hi_name)
         }
         hi_len = sizeof(tlv_host_id) + 2 + HIP_ECDSA384_SIG_SIZE; // TODO: 33 if compressed
       break;
+    case HI_ALG_EDDSA: /*        tlv + curve_len + public_key_len */
+      if (!hi->eddsa)
+      {
+        log_(WARN, "No EdDSA context when building length!\n");
+        return (0);
+      }
+
+      int curve_id = EdDSA_get_curve_id(hi->eddsa);
+      switch (curve_id)
+      {
+        case EDDSA_25519:
+          hi_len = sizeof(tlv_host_id) + 2 + HIP_EDDSA25519_SIG_SIZE;
+          break;
+        case EDDSA_448:
+          hi_len = sizeof(tlv_host_id) + 2 + HIP_EDDSA448_SIG_SIZE;
+          break;
+        default:
+          log_(WARN, "EdDSA curve %d has no known length.\n", curve_id);
+          break;
+      }
+      break;
 
     default:
       break;
@@ -2297,6 +2344,18 @@ int build_tlv_hostid(__u8 *data, hi_node *hi, int use_hi_name)
                                                bn_ctx);
       BN_CTX_free(bn_ctx); 
       break;
+      }
+      case HI_ALG_EDDSA:
+      {
+        __u16 *p = (__u16 *)&data[len];
+        *p = htons(EdDSA_get_curve_id(hi->eddsa));
+        len += 2;
+
+        size_t pubkeyLen = 0;
+        EVP_PKEY_get_raw_public_key(hi->eddsa, NULL, &pubkeyLen);
+        EVP_PKEY_get_raw_public_key(hi->eddsa, &data[len], &pubkeyLen);
+        len += pubkeyLen;
+        break;
       }
     default:
       break;
@@ -2453,6 +2512,16 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
       log_(WARN, "No RSA context for building signature TLV.\n");
       return(0);
     }
+  else if ((hi->algorithm_id == HI_ALG_ECDSA) && !hi->ecdsa)
+    {
+      log_(WARN, "No ECDSA context for building signature TLV.\n");
+      return(0);
+    }
+  else if ((hi->algorithm_id == HI_ALG_EDDSA) && !hi->eddsa)
+    {
+      log_(WARN, "No EdDSA context for building signature TLV.\n");
+      return(0);
+    }
 
   /* calculate SHA1 hash of the HIP message */
   switch (type)
@@ -2471,6 +2540,9 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
       SHA1_Init(&sha1_ctx);
       SHA1_Update(&sha1_ctx, data, location);
       SHA1_Final(md, &sha1_ctx);
+      break;
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+      SHAKE128(md, SHA256_DIGEST_LENGTH, data, location);
       break;
     default:
       // Default to SHA256 for backwards compatibility
@@ -2535,6 +2607,27 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
         sig_len = 2 * curve_param_size; 
       }
       break;
+      case HI_ALG_EDDSA:
+      {
+        size_t privkeyLen = 0;
+        EVP_PKEY_get_raw_private_key(hi->eddsa, NULL, &privkeyLen);
+        unsigned char *privKeyBuffer = malloc(privkeyLen);
+        EVP_PKEY_get_raw_private_key(hi->eddsa, privKeyBuffer, &privkeyLen);
+
+        free(privKeyBuffer);
+
+        EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+        if (!EVP_DigestSignInit(ctx, NULL, NULL, NULL, hi->eddsa))
+        {
+          log_(WARN, "Could not initialize EdDSA signature context.\n");
+          return -1;
+        }
+
+        sig_len = HIP_EDDSA25519_SIG_SIZE;
+        err = EVP_DigestSign(ctx, sig->signature, (unsigned long int*)&sig_len, md, SHA256_DIGEST_LENGTH);
+        EVP_MD_CTX_free(ctx);
+      }
+      break;
     default:
       break;
     }
@@ -2595,6 +2688,17 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
               data, location,
               hmac_md, &hmac_md_len  );
       break;
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+    {
+      const unsigned char customization[] = "";
+      KMAC128(get_key(hip_a, HIP_INTEGRITY, FALSE),
+              auth_key_len_hit_suite(hip_a->hit_suite) * 8,
+              data, location * 8,
+              hmac_md, 256,
+              customization, 0); // TODO: Don't truncate KMAC
+      hmac_md_len = 256 / 8;
+      break;
+    }
     default:
       return(0);
       break;

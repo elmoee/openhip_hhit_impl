@@ -86,6 +86,7 @@
 
 #include <libxml/tree.h>
 #include <openssl/pem.h>
+#include "XKCP/SimpleFIPS202.h"
 
 #ifndef HITGEN
 
@@ -484,6 +485,19 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
             return(-1);
           }
         break;
+      }
+      case HI_ALG_EDDSA:
+      {
+        __u16* p = (__u16*) &data[0];
+        curve = *p;
+        curve = ntohs(curve);
+        key_len = hi_length - 2;
+        if (key_len != 256 / 8 && key_len != 456 / 8) // Ed25519 and Ed448
+          {
+            log_(WARN, "EdDSA invalid public key length %d \n", key_len);
+            return(-1);
+          }
+        break;
       }    
     default:
       log_(WARN, "Invalid HI type in RDATA: %u\n", alg);
@@ -517,6 +531,11 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
   else if ((alg == HI_ALG_ECDSA) && hi->ecdsa)
     {
       log_(WARN, "Parsing HI and ECDSA already exists.\n");
+      return(-1);
+    }
+  else if ((alg == HI_ALG_EDDSA) && hi->eddsa)
+    {
+      log_(WARN, "Parsing HI and EdDSA already exists.\n");
       return(-1);
     }
 
@@ -572,6 +591,16 @@ int key_data_to_hi(const __u8 *data, __u8 alg, int hi_length, __u8 di_type,
       BN_CTX_free(ctx);
 #ifndef HIP_VPLS
       log_(NORM, "Found ECDSA HI with public key: 0x");
+      print_hex((char *)&data[offset], key_len);
+      log_(NORM, "\n");
+#endif
+      offset += key_len;
+      break;
+    case HI_ALG_EDDSA:
+      offset = 2;
+      hi->eddsa = EVP_PKEY_new_raw_public_key(EdDSA_curve_nid[curve], NULL, &data[offset], key_len);
+#ifndef HIP_VPLS
+      log_(NORM, "Found EdDSA HI with public key: 0x");
       print_hex((char *)&data[offset], key_len);
       log_(NORM, "\n");
 #endif
@@ -926,6 +955,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
   hip_a->hi->dsa          = my_host_id->dsa;
   hip_a->hi->rsa          = my_host_id->rsa;
   hip_a->hi->ecdsa        = my_host_id->ecdsa;
+  hip_a->hi->eddsa        = my_host_id->eddsa;
   hip_a->hi->r1_gen_count = my_host_id->r1_gen_count;
   hip_a->hi->update_id    = my_host_id->update_id;
   hip_a->hi->algorithm_id = my_host_id->algorithm_id;
@@ -2293,6 +2323,7 @@ int khi_hi_input(hi_node *hi, __u8 *out)
                               RSA_size(hi->rsa));
       break;
     case HI_ALG_ECDSA:
+    {
       // Add curve id to the first to bytes of out, then add public key to the rest of out.
       location = 0;
       BN_CTX * bn_ctx = BN_CTX_new();
@@ -2312,6 +2343,21 @@ int khi_hi_input(hi_node *hi, __u8 *out)
                          bn_ctx);
       BN_CTX_free(bn_ctx); 
       break;
+    }
+    case HI_ALG_EDDSA:
+    {
+      // Add curve id to the first to bytes of out, then add public key to the rest of out.
+      location = 0;
+      __u16 *p =  (__u16*) &out[location];
+      *p = htons(EdDSA_get_curve_id(hi->eddsa));
+      location += 2;
+
+      size_t pubkeyLen = 0;
+      EVP_PKEY_get_raw_public_key(hi->eddsa, NULL, &pubkeyLen);
+      EVP_PKEY_get_raw_public_key(hi->eddsa, &out[location], &pubkeyLen);
+
+      break;
+    }
     default:
       return(-1);
     }
@@ -2396,6 +2442,20 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
                                  NULL, 0, 0);
 
       break;
+    case HI_ALG_EDDSA: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
+      if (!hi->eddsa)
+        {
+          log_(WARN, "hi_to_hit(): NULL eddsa\n");
+          return(-1);
+        }
+      len = sizeof(khi_context_id);
+      len += 2;  // Two bytes for the curv_name
+      // Get key length and add to len
+      size_t keyLen = 0;
+      EVP_PKEY_get_raw_public_key(hi->eddsa, NULL, &keyLen);
+      len += keyLen;
+
+      break;
     default:
       log_(WARN, "hi_to_hit(): invalid algorithm (%d)\n",
            hi->algorithm_id);
@@ -2435,6 +2495,8 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
       SHA1_Final(hash, &sha1_ctx);
       hash_len = SHA_DIGEST_LENGTH;
       break;
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
+      SHAKE128(hash, SHA256_DIGEST_LENGTH, data, len);
     default:
       SHA256_Init(&sha256_ctx);
       SHA256_Update(&sha256_ctx, data, len);

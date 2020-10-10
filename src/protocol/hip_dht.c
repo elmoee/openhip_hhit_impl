@@ -521,6 +521,7 @@ int hip_dht_lookup_address(hip_hit *hit, struct sockaddr *addr, int retry)
                                  peer_hi->dsa,
                                  peer_hi->rsa,
                                  peer_hi->ecdsa, 
+                                 peer_hi->eddsa,
                                  peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "HDRR has invalid signature.\n");

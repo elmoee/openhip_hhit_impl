@@ -75,7 +75,10 @@
 #include <hip/hip_sadb.h>
 #include <stdbool.h>
 #include <openssl/x509.h>
+#include <openssl/evp.h>
 #include "XKCP/Keyakv2.h"
+#include "XKCP/SimpleFIPS202.h"
+#include "XKCP/SP800-185.h"
 
 #ifdef HIP_VPLS
 #include <hip/hip_cfg_api.h>
@@ -723,6 +726,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
                                  hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->eddsa,
                                  hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
@@ -1663,6 +1667,7 @@ I2_ERROR:
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
                                  hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->eddsa,
                                  hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
@@ -2055,6 +2060,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
                                  hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->eddsa,
                                  hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
@@ -2305,6 +2311,7 @@ int hip_parse_update(const __u8 *data, hip_assoc *hip_a, struct rekey_info *rk,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
                                  hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->eddsa,
                                  hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
@@ -3436,6 +3443,7 @@ int hip_parse_close(const __u8 *data, hip_assoc *hip_a, __u32 *nonce)
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
                                  hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->eddsa,
                                  hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
@@ -3659,6 +3667,7 @@ int hip_parse_notify(__u8 *data,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
                                  hip_a->peer_hi->ecdsa,
+                                 hip_a->peer_hi->eddsa,
                                  hip_a->peer_hi->hit_suite_id) < 0)
             {
               log_(WARN, "Invalid signature.\n");
@@ -3867,7 +3876,7 @@ int hip_handle_BOS(__u8 *data, struct sockaddr *src)
   hiph->checksum = 0;
   hiph->hdr_len = (len / 8) - 1;
   if (validate_signature( data, location, tlv, peer_hi->dsa,
-                          peer_hi->rsa, peer_hi->ecdsa, peer_hi->hit_suite_id) < 0)
+                          peer_hi->rsa, peer_hi->ecdsa, peer_hi->eddsa, peer_hi->hit_suite_id) < 0)
     {
       log_(WARN, "Invalid signature in BOS.\n");
       err = -1;
@@ -3902,7 +3911,7 @@ int hip_handle_CER(__u8 *data, hip_assoc *hip_a)
  * out:		Returns 0 if signature is correct, -1 if incorrect or error.
  */
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
-                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa, int type)
+                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa, EVP_PKEY *eddsa, int type)
 {
   int err;
   SHA_CTX sha1_ctx;
@@ -3978,6 +3987,24 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
             }
         }
         break;
+    case HI_ALG_EDDSA:
+      if (!eddsa)
+        {
+          log_(WARN, "validate_signature(): ");
+          log_(NORM, "no EdDSA context!\n");
+          return(-1);
+        }
+        if (length != 1 + HIP_EDDSA25519_SIG_SIZE)
+        {
+          log_(WARN, "Invalid EdDSA signature size of %d ",
+               length);
+          log_(NORM, "(should be %d).\n", 1 + HIP_EDDSA25519_SIG_SIZE);
+          if (!OPT.permissive)
+            {
+              return(-1);
+            }
+        }
+        break;
     default:
       log_(WARN, "Invalid signature algorithm.\n");
       return(-1);
@@ -4000,6 +4027,9 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
       SHA1_Init(&sha1_ctx);
       SHA1_Update(&sha1_ctx, data, data_len);
       SHA1_Final(md, &sha1_ctx);
+      break;
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+      SHAKE128(md, SHA256_DIGEST_LENGTH, data, data_len);
       break;
     default:
       // Default to SHA256 for backwards compatibility
@@ -4046,6 +4076,20 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
         BN_free(ecdsa_sig_s);
       }
       break;
+      case HI_ALG_EDDSA:
+      {
+        EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+        if (!EVP_DigestVerifyInit(ctx, NULL, NULL, NULL, eddsa))
+        {
+          log_(WARN, "Could not initialize EdDSA verification context.\n");
+          return -1;
+        }
+
+        err = EVP_DigestVerify(ctx, sig->signature, sig_len, md, SHA256_DIGEST_LENGTH);
+        EVP_MD_CTX_free(ctx);
+
+        break;
+      }
     default:
       err = -1;
       break;
@@ -4112,6 +4156,16 @@ int validate_hmac(const __u8 *data, int data_len, __u8 *hmac, int hmac_len,
               data, data_len,
               hmac_md, &hmac_md_len  );
       break;
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+    {
+      const unsigned char customization[] = "";
+      KMAC128(key, key_len * 8,
+              data, data_len * 8,
+              hmac_md, 256,
+              customization, 0);
+      hmac_md_len = 256 / 8;
+      break;
+    }
       /* in case someone tries to use unsupported mac/signature algorithm */
     default:
       return(-1);

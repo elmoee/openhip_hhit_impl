@@ -144,7 +144,7 @@ int hip_finish_rekey(hip_assoc *hip_a, int rebuild);
 int hip_handle_BOS(__u8 *data, struct sockaddr *src);
 int hip_handle_CER(__u8 *data, hip_assoc *hip_a);
 int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
-                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa, int type);
+                       DSA *dsa, RSA *rsa, EC_KEY* ecdsa, EVP_PKEY *eddsa, int type);
 int handle_hi(hi_node **hi_p, const __u8 *data);
 int complete_base_exchange(hip_assoc *hip_a);
 int rebuild_sa(hip_assoc *hip_a, struct sockaddr *newaddr, __u32 newspi,

@@ -89,7 +89,7 @@ typedef struct _hi_options {
   char hit_suite_id;
   __u64 r1count;
   char *name;
-  int curve_id; // If type is ECDSA or ECDSA_low, this sets it curve id.
+  int curve_id; // If type is ECDSA, ECDSA_low or EdDSA, this sets it curve id.
 } hi_options;
 
 extern struct hip_opt OPT;
@@ -110,6 +110,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   RSA *rsa = NULL;
   BN_GENCB *cb = NULL;
   EC_KEY* ecdsa = NULL;
+  EVP_PKEY *eddsa = NULL;
   printf("Generating a %d-bit %s key\n",
          opts->bitsize, HI_TYPESTR(opts->type));
   
@@ -194,6 +195,31 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
         }
       break;
       }
+      case HI_ALG_EDDSA:
+      {
+        int success;
+        unsigned int openssl_nid = EdDSA_curve_nid[opts->curve_id];
+        EVP_PKEY_CTX *pkey_ctx = EVP_PKEY_CTX_new_id(openssl_nid, NULL);
+
+        if (!pkey_ctx)
+        {
+          fprintf(stderr, "EVP_PKEY_CTX_new_id() failed.\n");
+          exit(1);
+        }
+
+        printf("Generating EdDSA keys for HI...\n");
+        success = EVP_PKEY_keygen_init(pkey_ctx);
+        if (success)
+          success = EVP_PKEY_keygen(pkey_ctx, &eddsa);
+        EVP_PKEY_CTX_free(pkey_ctx);
+
+        if (!success)
+        {
+          fprintf(stderr, "EVP_PKEY_keygen() failed.\n");
+          exit(1);
+        }
+        break;
+      }
     default:
       printf("Error: generate_HI() got invalid HI type\n");
       exit(1);
@@ -274,6 +300,38 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
                     0)
       );
       break;
+    case HI_ALG_EDDSA:
+    {
+      sprintf(
+          tmp, "%u",
+          (unsigned int)opts->curve_id); // Write curve id to config file.
+      xmlNewChild(hi, NULL, BAD_CAST "CURVE", BAD_CAST tmp);
+
+      size_t privkeyLen = 0;
+      EVP_PKEY_get_raw_private_key(eddsa, NULL, &privkeyLen);
+      unsigned char *privKeyBuffer = malloc(privkeyLen);
+      EVP_PKEY_get_raw_private_key(eddsa, privKeyBuffer, &privkeyLen);
+
+      size_t pubkeyLen = 0;
+      EVP_PKEY_get_raw_public_key(eddsa, NULL, &pubkeyLen);
+      unsigned char *pubKeyBuffer = malloc(pubkeyLen);
+      EVP_PKEY_get_raw_public_key(eddsa, pubKeyBuffer, &pubkeyLen);
+
+      xmlNewChild(
+          hi,
+          NULL,
+          BAD_CAST "PRIV",
+          BAD_CAST OPENSSL_buf2hexstr(privKeyBuffer, privkeyLen));
+      xmlNewChild(
+          hi,
+          NULL,
+          BAD_CAST "PUB",
+          BAD_CAST OPENSSL_buf2hexstr(pubKeyBuffer, pubkeyLen));
+
+      free(privKeyBuffer);
+      free(pubKeyBuffer);
+      break;
+    }
     default:
       break;
     }
@@ -290,6 +348,7 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
   hostid.rsa = rsa;
   hostid.dsa = dsa;
   hostid.ecdsa = ecdsa;
+  hostid.eddsa = eddsa;
 
   hit.ss_family = AF_INET6;
   hitp = SA2IP(&hit);
@@ -566,8 +625,8 @@ void print_hitgen_usage()
   printf(" -file <file> \t write output to the specified file\n");
   printf(" -append\t append identity if file already exists\n");
   printf("Host identitiy generation:\n");
-  printf(" -type \t\t followed by \"DSA\", \"RSA\" or \"ECDSA\" specifying the key type\n");
-  printf(" -curve \t\t followed by id for the ECDSA curve to be used. Default 1\n");
+  printf(" -type \t\t followed by \"DSA\", \"RSA\", \"ECDSA\" or \"EdDSA\" specifying the key type\n");
+  printf(" -curve \t\t followed by id for the ECDSA/EdDSA curve to be used. Default 1\n");
   printf(" -suite \t\t followed by id for the suite to be used. Default 0\n");
   printf(" -bits \t\t specifies the length in bits for (P,G,Y)\n");
   printf(" -length \t specifies the length in bytes for (P,G,Y)\n");
@@ -694,6 +753,10 @@ int main(int argc, char *argv[])
           else if (strcmp(*argv, "ECDSA") == 0)
             {
               opts.type = HI_ALG_ECDSA;
+            }
+          else if (strcmp(*argv, "EdDSA") == 0)
+            {
+              opts.type = HI_ALG_EDDSA;
             }
           else
             {

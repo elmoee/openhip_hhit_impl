@@ -253,6 +253,7 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
   memset(&hi->lsi, 0, sizeof(struct sockaddr_storage));
   BIGNUM *dsa_p = NULL, *dsa_q = NULL, *dsa_g = NULL, *dsa_pub_key = NULL, *dsa_priv_key = NULL;
   BIGNUM *rsa_n = NULL, *rsa_e = NULL, *rsa_d = NULL, *rsa_p = NULL, *rsa_q = NULL, *rsa_dmp1 = NULL, *rsa_dmq1 = NULL, *rsa_iqmp  = NULL;
+  unsigned int EdDSA_curve = 0;
   for (; node; node = node->next)
     {
       /* skip entity refs */
@@ -355,8 +356,31 @@ void parse_xml_hostid(xmlNodePtr node, hi_node *hi)
                 EC_KEY_set_private_key(hi->ecdsa, priv);
               }
             break;
-        default:
-          break;
+          case HI_ALG_EDDSA:
+            if (strcmp((char *)node->name, "CURVE") == 0)
+            {
+              sscanf(data, "%u", &EdDSA_curve);
+              if (EdDSA_curve > EDDSA_MAX)
+              {
+                log_(WARN, "Curve id %u invalid", EdDSA_curve);
+                continue;
+              }
+              EdDSA_curve = EdDSA_curve_nid[EdDSA_curve];
+            }
+            if (strcmp((char *)node->name, "PUB") == 0)
+            {
+              // Not needed, automatically derived from private key
+            }
+            else if (strcmp((char *)node->name, "PRIV") == 0)
+            {
+              long len = 0;
+              unsigned char *privKeyBuffer = OPENSSL_hexstr2buf(data, &len);
+              hi->eddsa = EVP_PKEY_new_raw_private_key(EdDSA_curve, NULL, privKeyBuffer, len);
+              OPENSSL_free(privKeyBuffer);
+            }
+            break;
+          default:
+            break;
         }
       /* get HI values that are not algorithm-specific */
       if (strcmp((char *)node->name, "HIT") == 0)
@@ -612,6 +636,9 @@ int read_identities_file(char *filename, int mine)
               break;
             case HI_ALG_ECDSA:
               hi->ecdsa = EC_KEY_new();
+              break;
+            case HI_ALG_EDDSA:
+              // hi->eddsa will be initialized when private key is read from XML
               break;
             default:
               if (mine)
@@ -893,6 +920,36 @@ int hi_to_xml(xmlNodePtr root_node, hi_node *h, int mine)
                         BN_CTX_new())
           );
           break;
+        case HI_ALG_EDDSA:
+        {
+          int curve = EdDSA_get_curve_id(h->eddsa);
+          sprintf(tmp, "%u", (unsigned int)curve);
+          xmlNewChild(hi, NULL, BAD_CAST "CURVE", BAD_CAST tmp);
+          size_t privkeyLen = 0;
+          EVP_PKEY_get_raw_private_key(h->eddsa, NULL, &privkeyLen);
+          unsigned char *privKeyBuffer = malloc(privkeyLen);
+          EVP_PKEY_get_raw_private_key(h->eddsa, privKeyBuffer, &privkeyLen);
+
+          size_t pubkeyLen = 0;
+          EVP_PKEY_get_raw_public_key(h->eddsa, NULL, &pubkeyLen);
+          unsigned char *pubKeyBuffer = malloc(pubkeyLen);
+          EVP_PKEY_get_raw_public_key(h->eddsa, pubKeyBuffer, &pubkeyLen);
+
+          xmlNewChild(
+              hi,
+              NULL,
+              BAD_CAST "PRIV",
+              BAD_CAST OPENSSL_buf2hexstr(privKeyBuffer, privkeyLen));
+          xmlNewChild(
+              hi,
+              NULL,
+              BAD_CAST "PUB",
+              BAD_CAST OPENSSL_buf2hexstr(pubKeyBuffer, pubkeyLen));
+
+          free(privKeyBuffer);
+          free(pubKeyBuffer);
+          break;
+        }
         default:
           break;
         }
@@ -1222,6 +1279,9 @@ int read_conf_file(char *filename)
               break;
             case 3 :
               suite = HIT_SUITE_4BIT_ECDSA_LOW_SHA1;
+              break;
+            case 5 :
+              suite = HIT_SUITE_4BIT_EDDSA_CSHAKE128;
               break;
             
             default:
