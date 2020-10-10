@@ -594,7 +594,7 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
   int location, data_len;
   int len, type, length;
   unsigned char *dh_secret_key;
-  int last_type = 0, status = -1, sig_verified = FALSE;
+  int last_type = 0, status = -1, sig_verified = FALSE, hip_suite_set = FALSE;
   __u8 g_id = 0;
   __u16 *p;
   tlv_puzzle *tlv_pz = NULL;
@@ -627,6 +627,36 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
         {
           last_type = type;
         }
+
+        if (!hip_suite_set)
+        {
+          if (type == PARAM_HIT_SUITE_LIST)
+          {
+            tlv_hit_suite *hit_suite_list = (tlv_hit_suite *)&data[location];
+
+            if (handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length) < 0)
+            {
+              log_(ERR, "Peer HIT Suites unsupported, aborting base exchange...\n");
+              hip_send_notify(hip_a,
+                              NOTIFY_UNSUPPORTED_HIT_SUITE,
+                              NULL, 0);
+              return (-1);
+            }
+            hip_suite_set = TRUE;
+
+            /* rewind, now accept packet parameters */
+            status = 0;
+            last_type = 0;
+            location = sizeof(hiphdr);
+            continue;
+          }
+          else // skip all parameters until HIT suite has been determined
+          {
+            location += tlv_length_to_parameter_length(length);
+            continue;
+          }
+        }
+
       /* First retrieve the HOST_ID and SIGNATURE before accepting
        * the rest of the R1 packet */
       if (!sig_verified && (type == PARAM_PUZZLE))
@@ -902,20 +932,10 @@ int hip_parse_R1(const __u8 *data, hip_assoc *hip_a)
            * that we used for the relay */
     }
     else if ((type == PARAM_HOST_ID) ||
-             (type == PARAM_HIP_SIGNATURE_2))
+             (type == PARAM_HIP_SIGNATURE_2) ||
+             (type == PARAM_HIT_SUITE_LIST))
     {
       /* these parameters already processed */
-    }
-    else if(type == PARAM_HIT_SUITE_LIST){
-      tlv_hit_suite *hit_suite_list = (tlv_hit_suite*) &data[location];
-
-      if(handle_hit_suite_list(hip_a, &hit_suite_list->hit_suite_id, length) < 0){
-        log_(ERR, "Peer HIT Suites unsupported, aborting base exchange...\n");
-        hip_send_notify(hip_a,
-                        NOTIFY_UNSUPPORTED_HIT_SUITE,
-                        NULL, 0);
-        return(-1);
-      }
     }
       else if (type == PARAM_CERT)
         {
