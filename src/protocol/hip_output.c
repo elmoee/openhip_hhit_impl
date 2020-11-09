@@ -92,7 +92,7 @@ int build_tlv_hit_suite(__u8 *data, __u8 *hit_suites);
 int build_tlv_locators(__u8* data, sockaddr_list *addrs, __u32 spi, int force);
 int build_tlv_echo_response(__u16 type, __u16 length, __u8 *buff, __u8 *data);
 int build_tlv_cert(__u8 *buff);
-int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type);
+int build_tlv_mac(hip_assoc *hip_a, __u8 *data, int location, int type);
 int build_tlv_reg_info(__u8 *data);
 int build_tlv_reg_req(__u8 *data, struct reg_entry *regs);
 int build_tlv_reg_resp(__u8 *data, struct reg_entry *regs);
@@ -161,7 +161,7 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
       /* RVS_HMAC: hip_a is the pre-existing association between the
        * RVS and the responder for the HMAC key */
       hiph->hdr_len = (location / 8) - 1;
-      location += build_tlv_hmac(hip_a, buff, location,
+      location += build_tlv_mac(hip_a, buff, location,
                                  PARAM_RVS_HMAC);
       hiph->hdr_len = (location / 8) - 1;
 
@@ -780,7 +780,7 @@ int hip_send_I2(hip_assoc *hip_a)
 
   /* add HMAC */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_hmac(hip_a, buff, location, PARAM_HMAC);
+  location += build_tlv_mac(hip_a, buff, location, PARAM_HMAC);
 
   /* build the HIP SIG in a SIG RR */
   hiph->hdr_len = (location / 8) - 1;
@@ -883,7 +883,7 @@ int hip_send_R2(hip_assoc *hip_a)
                                HCNF.send_hi_name);
   location = eight_byte_align(location);
   hiph->hdr_len = (location / 8) - 1;
-  build_tlv_hmac(hip_a, buff, location, PARAM_HMAC_2);
+  build_tlv_mac(hip_a, buff, location, PARAM_HMAC_2);
   /* memory areas overlap if sizeof(host_id) < sizeof(tlv_hmac) */
   memmove(&buff[hi_location], &buff[location], sizeof(tlv_hmac));
   location = hi_location + eight_byte_align(sizeof(tlv_hmac));
@@ -967,7 +967,7 @@ int hip_send_update_relay(__u8 *data, hip_assoc *hip_a_client)
    * RVS and the responder for the HMAC key */
   hiph->checksum = 0;
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_hmac(hip_a_client, buff, location,
+  location += build_tlv_mac(hip_a_client, buff, location,
                              PARAM_RVS_HMAC);
   hiph->hdr_len = (location / 8) - 1;
 
@@ -1237,7 +1237,7 @@ int hip_send_update(hip_assoc *hip_a, struct sockaddr *newaddr,
 
   /* HMAC */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_hmac(hip_a, buff, location, PARAM_HMAC);
+  location += build_tlv_mac(hip_a, buff, location, PARAM_HMAC);
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
@@ -1449,7 +1449,7 @@ int hip_send_update_proxy_ticket(hip_assoc *hip_mr, hip_assoc *hip_a)
 
   /* HMAC */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_hmac(hip_mr, buff, location, PARAM_HMAC);
+  location += build_tlv_mac(hip_mr, buff, location, PARAM_HMAC);
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
@@ -1519,7 +1519,7 @@ int hip_send_update_locators(hip_assoc *hip_a)
 
   /* HMAC */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_hmac(hip_a, buff, location, PARAM_HMAC);
+  location += build_tlv_mac(hip_a, buff, location, PARAM_HMAC);
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
@@ -1631,7 +1631,7 @@ int hip_send_close(hip_assoc *hip_a, int send_ack)
 
   /* HMAC */
   hiph->hdr_len = (location / 8) - 1;
-  location += build_tlv_hmac(hip_a, buff, location, PARAM_HMAC);
+  location += build_tlv_mac(hip_a, buff, location, PARAM_HMAC);
 
   /* HIP signature */
   hiph->hdr_len = (location / 8) - 1;
@@ -2650,9 +2650,11 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
 }
 
 /*
- * build_tlv_hmac()
+ * build_tlv_mac()
+ * replaces build_tlv_hmac() to also work with kmac
+ * 
  */
-int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
+int build_tlv_mac(hip_assoc *hip_a, __u8 *data, int location, int type)
 {
   hiphdr *hiph;
   tlv_hmac *hmac;
@@ -2719,6 +2721,8 @@ int build_tlv_hmac(hip_assoc *hip_a, __u8 *data, int location, int type)
           sizeof(hmac->hmac));
   return(eight_byte_align(sizeof(tlv_hmac)));
 }
+
+
 
 /*
  * build_tlv_reg_info()
