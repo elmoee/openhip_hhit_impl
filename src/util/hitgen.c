@@ -714,7 +714,7 @@ int main(int argc, char *argv[])
   opts.anon = 0;
   opts.incoming = 1;
   opts.r1count = 10;
-  opts.hit_suite_id = 0;
+  opts.hit_suite_id = 1;
   opts.name = name;
 
   /*
