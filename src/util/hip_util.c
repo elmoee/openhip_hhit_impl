@@ -2511,7 +2511,7 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
   khi_encode_n(hash, hash_len, &hit[4], 96 );
   /* lower 96 bits of HIT */
-  hit[3] |= (0x0F & hi->hit_suite_id); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
+  hit[3] |= (0x0F & type); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
   free(data);
   return(0);
 }
@@ -2533,7 +2533,10 @@ int validate_hit(hip_hit hit, hi_node *hi)
       return(FALSE);
     }
 
-  if (hi_to_hit(hi, computed_hit, hi->hit_suite_id) < 0)
+  // OGA ID is at bytes 29-32, get bytes 25-32 and mask away the upper 4 bits
+  unsigned char oga_id = hit[3] & 0x0F;
+
+  if (hi_to_hit(hi, computed_hit, oga_id) < 0)
     {
       return(FALSE);
     }
