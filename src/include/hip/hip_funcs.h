@@ -98,6 +98,9 @@
 #define IN6_LL(a) \
   IN6_IS_ADDR_LINKLOCAL( &((struct sockaddr_in6*)a)->sin6_addr )
 
+#define EIGHT_BYTE_ALIGN(location) \
+  (location <= 0 ? 0 : 7 + location - (location - 1) % 8)
+
 
 /*
  *  Function prototypes

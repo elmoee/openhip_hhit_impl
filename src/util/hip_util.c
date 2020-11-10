@@ -2998,14 +2998,7 @@ int tlv_length_to_parameter_length(int length)
  */
 int eight_byte_align(int location)
 {
-  if (location <= 0)
-    {
-      return(0);
-    }
-  else
-    {
-      return (7 + location - (location - 1) % 8);
-    }
+  return EIGHT_BYTE_ALIGN(location);
 }
 
 /*

@@ -1630,8 +1630,6 @@ I2_ERROR:
           hiph->hdr_len = (len / 8) - 1;
           log_(NORM, "HMAC verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
-          /* TODO: TDDE21 Get the actual hit_suite from hip peer (previous assoc in hip_arr). */
-          hip_a->hit_suite = HIT_SUITE_4BIT_RSA_DSA_SHA256;
           if (validate_hmac(data, len,
                             hmac, length,
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
@@ -1663,6 +1661,7 @@ I2_ERROR:
           len = eight_byte_align(location);
           hiph->checksum = 0;
           hiph->hdr_len = (len / 8) - 1;
+          hip_a->peer_hi->hit_suite_id = hip_a->hit_suite;
           if (validate_signature(data, len, tlv,
                                  hip_a->peer_hi->dsa,
                                  hip_a->peer_hi->rsa,
@@ -1947,12 +1946,14 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
   tlv_head *tlv;
   char sig_tlv_tmp[sizeof(tlv_hip_sig) + MAX_SIG_SIZE + 2];
   tlv_esp_info *esp_info;
-  tlv_hmac hmac_tlv_tmp;
+  // Larger buffer to account for eight byte-aligned padding
+  unsigned char *hmac_tlv_tmp_buffer[EIGHT_BYTE_ALIGN(sizeof(tlv_hmac))];
+  tlv_hmac* hmac_tlv_tmp = (tlv_hmac*) hmac_tlv_tmp_buffer;
   unsigned char *hmac;
   __u16 proposed_keymat_index = 0;
   __u32 proposed_spi_out = 0;
 
-  memset(&hmac_tlv_tmp, 0, sizeof(tlv_hmac));
+  memset(hmac_tlv_tmp, 0, sizeof(tlv_hmac));
 
   location = 0;
   hi_loc = 0;
@@ -1982,7 +1983,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
       else if (type == PARAM_HMAC_2)
         {
           /* save the HMAC_2 for processing after SIG is saved */
-          memcpy(&hmac_tlv_tmp, tlv, sizeof(tlv_hmac));
+          memcpy(hmac_tlv_tmp_buffer, tlv, EIGHT_BYTE_ALIGN(sizeof(tlv_hmac)));
           hi_loc = eight_byte_align(location);
         }
       else if (type == PARAM_HIP_SIGNATURE)
@@ -2024,11 +2025,11 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
                                           hip_a->peer_hi, TRUE);
           hiph->checksum = 0;
           hiph->hdr_len = (len / 8) - 1;
-          hmac = hmac_tlv_tmp.hmac;
+          hmac = hmac_tlv_tmp->hmac;
           log_(NORM, "HMAC_2 verify over %d bytes. ",len);
           log_(NORM, "hdr length=%d \n", hiph->hdr_len);
           if (validate_hmac(data, len,
-                            hmac, htons(hmac_tlv_tmp.length),
+                            hmac, htons(hmac_tlv_tmp->length),
                             get_key(hip_a, HIP_INTEGRITY, TRUE),
                             hip_a->hit_suite))
             {
@@ -2050,7 +2051,7 @@ int hip_parse_R2(__u8 *data, hip_assoc *hip_a)
               log_(NORM, "HMAC_2 verified OK.\n");
             }
           /* restore the HMAC_2 and SIG tlvs */
-          memcpy(&data[hi_loc], &hmac_tlv_tmp, sizeof(tlv_hmac));
+          memcpy(&data[hi_loc], hmac_tlv_tmp_buffer, EIGHT_BYTE_ALIGN(sizeof(tlv_hmac)));
           memcpy(tlv, sig_tlv_tmp, length + 4);
           /* now do signature processing */
           len = eight_byte_align(location);
