@@ -2497,11 +2497,12 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
       break;
     case HIT_SUITE_4BIT_EDDSA_CSHAKE128: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
       SHAKE128(hash, SHA256_DIGEST_LENGTH, data, len);
-    default:
-      SHA256_Init(&sha256_ctx);
-      SHA256_Update(&sha256_ctx, data, len);
-      SHA256_Final(hash, &sha256_ctx);
       hash_len = SHA256_DIGEST_LENGTH;
+      break;
+    default:
+      log_(WARN, "hi_to_hit(): invalid hit_suit (%d)\n",
+           type);
+      return(-1);
     }
 
 

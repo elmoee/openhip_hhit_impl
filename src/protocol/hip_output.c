@@ -2523,7 +2523,7 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
       return(0);
     }
 
-  /* calculate SHA1 hash of the HIP message */
+  /* calculate the hash of the HIP message using specified algorithm */
   switch (type)
     {
     case HIT_SUITE_4BIT_RSA_DSA_SHA256:
@@ -2545,10 +2545,8 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
       SHAKE128(md, SHA256_DIGEST_LENGTH, data, location);
       break;
     default:
-      // Default to SHA256 for backwards compatibility
-      SHA256_Init(&sha256_ctx);
-      SHA256_Update(&sha256_ctx, data, location);
-      SHA256_Final(md, &sha256_ctx);
+      log_(WARN, "No algorithm specified for building signature TLV.\n");
+      return(0);
     }
 
   /* build tlv header */

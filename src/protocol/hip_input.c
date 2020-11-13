@@ -4033,10 +4033,9 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
       SHAKE128(md, SHA256_DIGEST_LENGTH, data, data_len);
       break;
     default:
-      // Default to SHA256 for backwards compatibility
-      SHA256_Init(&sha256_ctx);
-      SHA256_Update(&sha256_ctx, data, data_len);
-      SHA256_Final(md, &sha256_ctx);
+      log_(WARN, "hi_to_hit(): invalid hit_suit (%d)\n",
+           type);
+      return(-1);
     }
 
   /* for debugging, print out md or signature */
