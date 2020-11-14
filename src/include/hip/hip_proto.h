@@ -71,6 +71,12 @@ typedef enum {
   E_FAILED              /* HIP SA establishment failed		*/
 } HIP_STATES;
 
+typedef enum
+{
+  ROLE_INITIATOR,
+  ROLE_RESPONDER
+} HIP_ROLES;
+
 /* HIP packet types */
 typedef enum {
   HIP_I1 = 1,

@@ -352,6 +352,7 @@ typedef struct _hip_assoc {
   struct _hi_node *peer_hi;
   /* Misc. state variables */
   int state;
+  int role; // Store role as either initiator or responder
   struct timeval state_time;
   struct timeval use_time;
   int icmp_update_status;

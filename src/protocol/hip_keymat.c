@@ -226,17 +226,52 @@ int compute_keymat(hip_assoc *hip_a)
   {
   case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
   {
+    EVP_PKEY *initiatorPKEY = NULL;
+    EVP_PKEY *responderPKEY = NULL;
+
+    if (hip_a->role == ROLE_INITIATOR)
+    {
+      initiatorPKEY = hip_a->hi->eddsa;
+      responderPKEY = hip_a->peer_hi->eddsa;
+    }
+    else if (hip_a->role == ROLE_RESPONDER)
+    {
+      initiatorPKEY = hip_a->peer_hi->eddsa;
+      responderPKEY = hip_a->hi->eddsa;
+    }
+    else
+    {
+      log_(WARN, "Could not determine if this node is initiator or responder for KKDF\n");
+      return -1;
+    }
+
+
     size_t initiatorPubkeyLen = 0;
-    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, NULL, &initiatorPubkeyLen);
+    EVP_PKEY_get_raw_public_key(initiatorPKEY, NULL, &initiatorPubkeyLen);
     unsigned char *initiatorPubKeyBuffer = malloc(initiatorPubkeyLen);
-    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, initiatorPubKeyBuffer, &initiatorPubkeyLen);
+    if (initiatorPubKeyBuffer == NULL)
+    {
+      log_(WARN, "Failed to allocate memory for EdDSA public key\n");
+      return -1;
+    }
+    EVP_PKEY_get_raw_public_key(initiatorPKEY, initiatorPubKeyBuffer, &initiatorPubkeyLen);
 
     size_t responderPubkeyLen = 0;
-    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, NULL, &responderPubkeyLen);
+    EVP_PKEY_get_raw_public_key(responderPKEY, NULL, &responderPubkeyLen);
     unsigned char *responderPubKeyBuffer = malloc(responderPubkeyLen);
-    EVP_PKEY_get_raw_public_key(hip_a->hi->eddsa, responderPubKeyBuffer, &responderPubkeyLen);
+    if (responderPubKeyBuffer == NULL)
+    {
+      log_(WARN, "Failed to allocate memory for EdDSA public key\n");
+      return -1;
+    }
+    EVP_PKEY_get_raw_public_key(responderPKEY, responderPubKeyBuffer, &responderPubkeyLen);
 
     unsigned char *kmacKey = malloc(info_len + salt_len);
+    if (kmacKey == NULL)
+    {
+      log_(WARN, "Failed to allocate memory for KMAC key\n");
+      return -1;
+    }
     memcpy(kmacKey, salt, salt_len);
     memcpy(&kmacKey[salt_len], info, info_len);
 
@@ -247,12 +282,18 @@ int compute_keymat(hip_assoc *hip_a)
     memcpy(&ikm[dh_secret_len], initiatorPubKeyBuffer, initiatorPubkeyLen);
     memcpy(&ikm[dh_secret_len + initiatorPubkeyLen], responderPubKeyBuffer, responderPubkeyLen);
 
-    KMAC128(kmacKey, (salt_len + info_len) * 8, ikm, ikmLen, hip_a->keymat, keymat_len, (unsigned char *)"KDF", 8 * 3);
+    int err = KMAC128(kmacKey, (salt_len + info_len) * 8, ikm, ikmLen * 8, hip_a->keymat, keymat_len * 8, (unsigned char *)"KDF", 8 * 3);
 
     free(initiatorPubKeyBuffer);
     free(responderPubKeyBuffer);
     free(kmacKey);
     free(ikm);
+
+    if (err != 0)
+    {
+      log_(WARN, "Failed to derive keys using KMAC\n");
+      return -1;
+    }
   }
   break;
   case HIT_SUITE_4BIT_RSA_DSA_SHA256:

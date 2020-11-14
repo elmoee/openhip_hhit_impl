@@ -1006,6 +1006,7 @@ hip_assoc *init_hip_assoc(hi_node *my_host_id, const hip_hit *peer_hit)
 
   /* Misc state */
   set_state(hip_a, UNASSOCIATED);
+  hip_a->role             = -1;
   hip_a->use_time.tv_sec  = 0;
   hip_a->use_time.tv_usec = 0;
   hip_a->used_bytes_in    = 0;

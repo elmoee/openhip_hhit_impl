@@ -1263,6 +1263,7 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
               free(solution);
               return(-1);
             }
+          hip_a->role = ROLE_RESPONDER;
           hip_a->dh_group_id = dh_entry->group_id;
           hip_a->evp_dh = dh_entry->evp_dh;
           dh_entry->ref_count++;
@@ -1327,29 +1328,41 @@ int hip_parse_I2(const __u8 *data, hip_assoc **hip_ar, hi_node *my_host_id,
             return(-1);
           }
           //hip_a->hip_transform = ESP_AES128_CBC_HMAC_SHA1; //TODO: remove
-          /* Must compute keys here so we can use them below. */
-          if (got_dh)
+          hip_a->hit_suite = hip_a->hi->hit_suite_id;
+          switch (hip_a->hi->hit_suite_id)
           {
-            // TODO Look in to how to decide the suite in 
-            // I2 packet.
-            hip_a -> hit_suite = hip_a->hi->hit_suite_id;
-            compute_keys(hip_a);
-            if (proposed_keymat_index >
-                hip_a->keymat_index)
-            {
-              hip_a->keymat_index =
-                  proposed_keymat_index;
-            }
-            comp_keys = 1;
-          }
-          else
-          {
-            log_(NORM, "Couldn't do compute_keys() ");
-            log_(NORM, "because DH is not set yet.\n");
-            if (!OPT.permissive)
-            {
-              return(-1);
-            }
+            case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+                // Do nothing, suite uses KMAC which requires that the HI is
+                // received before keys can be computed.
+              break;
+            case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+            case HIT_SUITE_4BIT_ECDSA_SHA384:
+            case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+              /* Must compute keys here so we can use them below. */
+              if (got_dh)
+              {
+                compute_keys(hip_a);
+                if (proposed_keymat_index >
+                    hip_a->keymat_index)
+                {
+                  hip_a->keymat_index =
+                      proposed_keymat_index;
+                }
+                comp_keys = 1;
+              }
+              else
+              {
+                log_(NORM, "Couldn't do compute_keys() ");
+                log_(NORM, "because DH is not set yet.\n");
+                if (!OPT.permissive)
+                {
+                  return(-1);
+                }
+              }
+              break;
+            default:
+              log_(WARN, "Unknown HIT suite %d in hip_parse_I2()\n", hip_a->hi->hit_suite_id);
+              break;
           }
         }
         else if (type == PARAM_ESP_TRANSFORM)
@@ -1601,6 +1614,28 @@ I2_ERROR:
             {
               log_(NORM, "HI in I2 validates the ");
               log_(NORM, "sender's HIT.\n");
+            }
+
+            switch (hip_a->hi->hit_suite_id)
+            {
+            case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+            {
+              compute_keys(hip_a);
+              if (proposed_keymat_index >
+                  hip_a->keymat_index)
+              {
+                hip_a->keymat_index =
+                    proposed_keymat_index;
+              }
+              comp_keys = 1;
+              break;
+            }
+            case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+            case HIT_SUITE_4BIT_ECDSA_SHA384:
+            case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+            default:
+              // Do nothing, keymat has already been computed
+              break;
             }
         }
       else if (type == PARAM_CERT)

@@ -139,6 +139,8 @@ int hip_send_I1(hip_hit *hit, hip_assoc *hip_a)
   src = HIPA_SRC(hip_a);
   dst = HIPA_DST(hip_a);
 
+  hip_a->role = ROLE_INITIATOR;
+
   /* in RVS mode, relay the I1 packet instead of triggering bex */
   if (OPT.rvs && hip_a->from_via)
     {
@@ -596,160 +598,176 @@ int hip_send_I2(hip_assoc *hip_a)
                                   zero16,
                                   hip_a->hip_cipher);
 
-  /* encrypted(host_id) */
-  enc = (tlv_encrypted*) &buff[location];
-  enc->type = htons(PARAM_ENCRYPTED);
-  memset(enc->reserved, 0, sizeof(enc->reserved));
-  iv_len = enc_iv_len(hip_a->hip_cipher);
-  /* inner padding is 8-byte aligned */
-  data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
-  /* AES has 128-bit IV/block size with which we need to align */
-  if (iv_len > 8)
-    {
-      data_len = (iv_len - 1) + data_len - (data_len - 1) % iv_len;
-    }
-  /* Set the encrypted TLV length. Encryption may require IV. */
-  enc->length = htons((__u16)(data_len + sizeof(enc->reserved) + iv_len));
-  if (iv_len)
-    {
-      memcpy(enc->iv, cbc_iv, iv_len);
-    }
-  unenc_data = (__u8 *)malloc(data_len);
-  enc_data = (__u8 *)malloc(data_len);
-  if (!unenc_data || !enc_data)
-    {
-      log_(ERR, "hip_send_I2: malloc error building encrypted TLV\n");
-      return(-1);
-    }
-  memset(unenc_data, 0, data_len);
-  memset(enc_data, 0, data_len);
-  /* host_id */
-  hi_location = build_tlv_hostid(unenc_data, hip_a->hi,HCNF.send_hi_name);
-  /* Pad the data using PKCS5 padding - for n bytes of padding, set
-   * those n bytes to 'n'. */
-  memset((unenc_data + hi_location),
-         (data_len - hi_location),         /* fill with pad length */
-         (data_len - hi_location));
-
-  switch (hip_a->hip_cipher)
-    {
-    case HIP_CIPHER_NULL_ENCRYPT:
-      /* don't send an IV with NULL encryption, copy data */
-      memcpy(enc->iv, unenc_data, data_len);
+  switch (hip_a->hit_suite)
+  {
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128:
+      // Suites using KMAC needs HI before compute_keymat() can be run,
+      // thus the HI has to be sent unencrypted.
+      location += build_tlv_hostid(&buff[location], hip_a->hi,HCNF.send_hi_name);
       break;
-    case HIP_CIPHER_AES128_CBC:
-    case HIP_CIPHER_AES256_CBC:
-      /* do AES CBC encryption */
-      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len_hip_cipher(hip_a->hip_cipher);
-      log_(NORM, "AES encryption key: 0x");
-      print_hex(key, len);
-      log_(NORM, "\n");
-      /* AES key must be 128, 192, or 256 bits in length */
-      if ((err = AES_set_encrypt_key(key, 8 * len, &aes_key)) != 0)
+
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      /* encrypted(host_id) */
+      enc = (tlv_encrypted*) &buff[location];
+      enc->type = htons(PARAM_ENCRYPTED);
+      memset(enc->reserved, 0, sizeof(enc->reserved));
+      iv_len = enc_iv_len(hip_a->hip_cipher);
+      /* inner padding is 8-byte aligned */
+      data_len = build_tlv_hostid_len(hip_a->hi, HCNF.send_hi_name);
+      /* AES has 128-bit IV/block size with which we need to align */
+      if (iv_len > 8)
         {
-          log_(WARN, "Unable to use calculated DH secret for ");
-          log_(NORM, "AES key (%d)\n", err);
-          free(unenc_data);
-          free(enc_data);
+          data_len = (iv_len - 1) + data_len - (data_len - 1) % iv_len;
+        }
+      /* Set the encrypted TLV length. Encryption may require IV. */
+      enc->length = htons((__u16)(data_len + sizeof(enc->reserved) + iv_len));
+      if (iv_len)
+        {
+          memcpy(enc->iv, cbc_iv, iv_len);
+        }
+      unenc_data = (__u8 *)malloc(data_len);
+      enc_data = (__u8 *)malloc(data_len);
+      if (!unenc_data || !enc_data)
+        {
+          log_(ERR, "hip_send_I2: malloc error building encrypted TLV\n");
           return(-1);
         }
-      log_(NORM, "Encrypting %d bytes using AES.\n", data_len);
-      AES_cbc_encrypt(unenc_data, enc_data, data_len, &aes_key,
-                      cbc_iv, AES_ENCRYPT);
-      memcpy(enc->iv + iv_len, enc_data, data_len);
-      break;
-    case HIP_CIPHER_RIVER_KEYAK:
-    {
-      /* do River Keyak encryption */
-      RiverKeyak_Instance rk_inst;
-      memset(&rk_inst, 0, sizeof(rk_inst));
-      // Must be provided to Keyak_Wrap, unused for now
-      unsigned char rk_tag[16];
-      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len_hip_cipher(hip_a->hip_cipher);
-      log_(NORM, "River Keyak encryption key: 0x");
-      print_hex(key, len);
-      log_(NORM, "\n");
+      memset(unenc_data, 0, data_len);
+      memset(enc_data, 0, data_len);
+      /* host_id */
+      hi_location = build_tlv_hostid(unenc_data, hip_a->hi,HCNF.send_hi_name);
+      /* Pad the data using PKCS5 padding - for n bytes of padding, set
+      * those n bytes to 'n'. */
+      memset((unenc_data + hi_location),
+            (data_len - hi_location),         /* fill with pad length */
+            (data_len - hi_location));
 
-      if ((err = RiverKeyak_Initialize(&rk_inst,
-                                       key,
-                                       len,
-                                       cbc_iv,
-                                       sizeof(cbc_iv),
-                                       FALSE,
-                                       NULL,
-                                       FALSE,
-                                       TRUE)) != 1)
-      {
-        log_(WARN, "Unable to use calculated DH secret for River Keyak key (%d)\n", err);
-        free(unenc_data);
-        free(enc_data);
-        return (-1);
-      }
-      log_(NORM, "Encrypting %d bytes using River Keyak.\n", data_len);
-      RiverKeyak_Wrap(&rk_inst,
-                      unenc_data,
-                      enc_data,
-                      data_len,
-                      NULL,
-                      0,
-                      FALSE,
-                      rk_tag,
-                      FALSE,
-                      TRUE);
-      memcpy(enc->iv + iv_len, enc_data, data_len);
-      break;
-    }
-    case HIP_CIPHER_LAKE_KEYAK:
-    {
-      /* do Lake Keyak encryption */
-      LakeKeyak_Instance lk_inst;
-      memset(&lk_inst, 0, sizeof(lk_inst));
-      // Must be provided to Keyak_Wrap, unused for now
-      unsigned char lk_tag[16];
-      key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
-      len = enc_key_len_hip_cipher(hip_a->hip_cipher);
-      log_(NORM, "Lake Keyak encryption key: 0x");
-      print_hex(key, len);
-      log_(NORM, "\n");
+      switch (hip_a->hip_cipher)
+        {
+        case HIP_CIPHER_NULL_ENCRYPT:
+          /* don't send an IV with NULL encryption, copy data */
+          memcpy(enc->iv, unenc_data, data_len);
+          break;
+        case HIP_CIPHER_AES128_CBC:
+        case HIP_CIPHER_AES256_CBC:
+          /* do AES CBC encryption */
+          key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
+          len = enc_key_len_hip_cipher(hip_a->hip_cipher);
+          log_(NORM, "AES encryption key: 0x");
+          print_hex(key, len);
+          log_(NORM, "\n");
+          /* AES key must be 128, 192, or 256 bits in length */
+          if ((err = AES_set_encrypt_key(key, 8 * len, &aes_key)) != 0)
+            {
+              log_(WARN, "Unable to use calculated DH secret for ");
+              log_(NORM, "AES key (%d)\n", err);
+              free(unenc_data);
+              free(enc_data);
+              return(-1);
+            }
+          log_(NORM, "Encrypting %d bytes using AES.\n", data_len);
+          AES_cbc_encrypt(unenc_data, enc_data, data_len, &aes_key,
+                          cbc_iv, AES_ENCRYPT);
+          memcpy(enc->iv + iv_len, enc_data, data_len);
+          break;
+        case HIP_CIPHER_RIVER_KEYAK:
+        {
+          /* do River Keyak encryption */
+          RiverKeyak_Instance rk_inst;
+          memset(&rk_inst, 0, sizeof(rk_inst));
+          // Must be provided to Keyak_Wrap, unused for now
+          unsigned char rk_tag[16];
+          key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
+          len = enc_key_len_hip_cipher(hip_a->hip_cipher);
+          log_(NORM, "River Keyak encryption key: 0x");
+          print_hex(key, len);
+          log_(NORM, "\n");
 
-      if ((err = LakeKeyak_Initialize(&lk_inst,
-                                      key,
-                                      len,
-                                      cbc_iv,
-                                      sizeof(cbc_iv),
-                                      FALSE,
-                                      NULL,
-                                      FALSE,
-                                      TRUE)) != 1)
-      {
-        log_(WARN, "Unable to use calculated DH secret for Lake Keyak key (%d)\n", err);
-        free(unenc_data);
-        free(enc_data);
-        return (-1);
-      }
-      log_(NORM, "Encrypting %d bytes using Lake Keyak.\n", data_len);
-      LakeKeyak_Wrap(&lk_inst,
-                     unenc_data,
-                     enc_data,
-                     data_len,
-                     NULL,
-                     0,
-                     FALSE,
-                     lk_tag,
-                     FALSE,
-                     TRUE);
-      memcpy(enc->iv + iv_len, enc_data, data_len);
+          if ((err = RiverKeyak_Initialize(&rk_inst,
+                                          key,
+                                          len,
+                                          cbc_iv,
+                                          sizeof(cbc_iv),
+                                          FALSE,
+                                          NULL,
+                                          FALSE,
+                                          TRUE)) != 1)
+          {
+            log_(WARN, "Unable to use calculated DH secret for River Keyak key (%d)\n", err);
+            free(unenc_data);
+            free(enc_data);
+            return (-1);
+          }
+          log_(NORM, "Encrypting %d bytes using River Keyak.\n", data_len);
+          RiverKeyak_Wrap(&rk_inst,
+                          unenc_data,
+                          enc_data,
+                          data_len,
+                          NULL,
+                          0,
+                          FALSE,
+                          rk_tag,
+                          FALSE,
+                          TRUE);
+          memcpy(enc->iv + iv_len, enc_data, data_len);
+          break;
+        }
+        case HIP_CIPHER_LAKE_KEYAK:
+        {
+          /* do Lake Keyak encryption */
+          LakeKeyak_Instance lk_inst;
+          memset(&lk_inst, 0, sizeof(lk_inst));
+          // Must be provided to Keyak_Wrap, unused for now
+          unsigned char lk_tag[16];
+          key = get_key(hip_a, HIP_ENCRYPTION, FALSE);
+          len = enc_key_len_hip_cipher(hip_a->hip_cipher);
+          log_(NORM, "Lake Keyak encryption key: 0x");
+          print_hex(key, len);
+          log_(NORM, "\n");
+
+          if ((err = LakeKeyak_Initialize(&lk_inst,
+                                          key,
+                                          len,
+                                          cbc_iv,
+                                          sizeof(cbc_iv),
+                                          FALSE,
+                                          NULL,
+                                          FALSE,
+                                          TRUE)) != 1)
+          {
+            log_(WARN, "Unable to use calculated DH secret for Lake Keyak key (%d)\n", err);
+            free(unenc_data);
+            free(enc_data);
+            return (-1);
+          }
+          log_(NORM, "Encrypting %d bytes using Lake Keyak.\n", data_len);
+          LakeKeyak_Wrap(&lk_inst,
+                        unenc_data,
+                        enc_data,
+                        data_len,
+                        NULL,
+                        0,
+                        FALSE,
+                        lk_tag,
+                        FALSE,
+                        TRUE);
+          memcpy(enc->iv + iv_len, enc_data, data_len);
+          break;
+        }
+        }
+      /* this is type + length + reserved + iv + data_len */
+      location += 4 + 4 + iv_len + data_len;
+      location = eight_byte_align(location);
+      free(unenc_data);
+      free(enc_data);
+      /* end HIP encryption */
+    break;
+    default:
+      log_(WARN, "Unknown HIT suite %d in hip_send_I2()\n", hip_a->hit_suite);
       break;
-    }
-    }
-  /* this is type + length + reserved + iv + data_len */
-  location += 4 + 4 + iv_len + data_len;
-  location = eight_byte_align(location);
-  free(unenc_data);
-  free(enc_data);
-  /* end HIP encryption */
+  }
 
   /* certificate */
   location += build_tlv_cert(&buff[location]);
