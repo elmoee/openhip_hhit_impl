@@ -4030,11 +4030,12 @@ int validate_signature(const __u8 *data, int data_len, tlv_head *tlv,
           log_(NORM, "no EdDSA context!\n");
           return(-1);
         }
-        if (length != 1 + HIP_EDDSA25519_SIG_SIZE)
+        if (length != 1 + HIP_EDDSA25519_SIG_SIZE && length != 1 + HIP_EDDSA448_SIG_SIZE)
         {
           log_(WARN, "Invalid EdDSA signature size of %d ",
                length);
-          log_(NORM, "(should be %d).\n", 1 + HIP_EDDSA25519_SIG_SIZE);
+          log_(NORM, "(should be %d for EdDSA25519 ", 1 + HIP_EDDSA25519_SIG_SIZE);
+          log_(NORM, "or %d for EdDSA448).\n", 1 + HIP_EDDSA448_SIG_SIZE);
           if (!OPT.permissive)
             {
               return(-1);

@@ -2639,7 +2639,20 @@ int build_tlv_signature(hi_node *hi, __u8 *data, int location, int R1, int type)
           return -1;
         }
 
-        sig_len = HIP_EDDSA25519_SIG_SIZE;
+        int curve_id = EdDSA_get_curve_id(hi->eddsa);
+        switch (curve_id)
+        {
+          case EDDSA_25519:
+            sig_len = HIP_EDDSA25519_SIG_SIZE;
+            break;
+          case EDDSA_448:
+            sig_len = HIP_EDDSA448_SIG_SIZE;
+            break;
+          default:
+            log_(WARN, "Unknown EdDSA curve ID: %d.\n", curve_id);
+            return 0;
+            break;
+        }
         err = EVP_DigestSign(ctx, sig->signature, (unsigned long int*)&sig_len, md, SHA256_DIGEST_LENGTH);
         EVP_MD_CTX_free(ctx);
       }
