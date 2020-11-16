@@ -190,13 +190,17 @@ int main_loop(int argc, char **argv)
   HCNF.dh_group = 0;
   HCNF.dh_group_list[0] = DH_SECP160R1;
   HCNF.dh_group_list[1] = DH_MODP_1536;
-  HCNF.hip_ciphers[0] = HIP_CIPHER_RIVER_KEYAK;
-  HCNF.hip_ciphers[1] = HIP_CIPHER_LAKE_KEYAK;
-  HCNF.hip_ciphers[2] = HIP_CIPHER_AES128_CBC;
-  HCNF.hip_ciphers[3] = HIP_CIPHER_AES256_CBC;
-  //HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
-  //HCNF.hit_suite_list[1] = HIT_SUITE_4BIT_ECDSA_SHA384;
-  //HCNF.hit_suite_list[2] = HIT_SUITE_4BIT_ECDSA_LOW_SHA1;
+  // Having 3 or more DH groups active results in R1 counter out-of-range problems
+  //HCNF.dh_group_list[2] = DH_CURVE_25519;
+  //HCNF.dh_group_list[3] = DH_CURVE_448;
+  HCNF.hip_ciphers[0] = HIP_CIPHER_AES128_CBC;
+  HCNF.hip_ciphers[1] = HIP_CIPHER_AES256_CBC;
+  HCNF.hip_ciphers[2] = HIP_CIPHER_RIVER_KEYAK;
+  HCNF.hip_ciphers[3] = HIP_CIPHER_LAKE_KEYAK;
+  HCNF.hit_suite_list[0] = HIT_SUITE_4BIT_RSA_DSA_SHA256;
+  HCNF.hit_suite_list[1] = HIT_SUITE_4BIT_ECDSA_SHA384;
+  HCNF.hit_suite_list[2] = HIT_SUITE_4BIT_ECDSA_LOW_SHA1;
+  HCNF.hit_suite_list[3] = HIT_SUITE_4BIT_EDDSA_CSHAKE128;
   HCNF.dh_lifetime = 900;
   HCNF.r1_lifetime = 300;
   HCNF.msl = 5;
