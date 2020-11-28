@@ -190,9 +190,10 @@ int main_loop(int argc, char **argv)
   HCNF.dh_group = 0;
   HCNF.dh_group_list[0] = DH_SECP160R1;
   HCNF.dh_group_list[1] = DH_MODP_1536;
-  // Having 3 or more DH groups active results in R1 counter out-of-range problems
-  //HCNF.dh_group_list[2] = DH_CURVE_25519;
-  //HCNF.dh_group_list[3] = DH_CURVE_448;
+  HCNF.dh_group_list[2] = DH_CURVE_25519;
+  HCNF.dh_group_list[3] = DH_CURVE_448;
+  /* Having more than [ACCEPTABLE_R1_COUNT_RANGE] DH groups active results in
+     R1 counter out-of-range problems */
   HCNF.hip_ciphers[0] = HIP_CIPHER_AES128_CBC;
   HCNF.hip_ciphers[1] = HIP_CIPHER_AES256_CBC;
   HCNF.hip_ciphers[2] = HIP_CIPHER_RIVER_KEYAK;
