@@ -2499,7 +2499,7 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
       break;
     case HIT_SUITE_4BIT_EDDSA_CSHAKE128: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
       hash_len = 96;
-      cSHAKE128(data, sizeof(data), hash, hash_len, (unsigned char*)"", 0, khi_context_id, sizeof(khi_context_id));
+      cSHAKE128(data, len*8, hash, hash_len, (unsigned char*)"", 0, khi_context_id, sizeof(khi_context_id)*8);
       // SHAKE128(hash, SHA256_DIGEST_LENGTH, data, len);
       // hash_len = SHA256_DIGEST_LENGTH;
       break;
@@ -2514,7 +2514,14 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
    */
   prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
-  khi_encode_n(hash, hash_len, &hit[4], 96 );
+  if(type == HIT_SUITE_4BIT_EDDSA_CSHAKE128)
+    {
+      memcpy(&hit[4], hash, hash_len/8);
+    }
+  else 
+    {
+      khi_encode_n(hash, hash_len, &hit[4], 96 );
+    }
   /* lower 96 bits of HIT */
   hit[3] |= (0x0F & type); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
   free(data);
@@ -2640,7 +2647,7 @@ int hi_to_hhit(hi_node *hi, hip_hit hit, int type, const char *hid)
       break;
     case HIT_SUITE_4BIT_EDDSA_CSHAKE128: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
       hash_len = 64;
-      cSHAKE128(data, sizeof(data), hash, hash_len, (unsigned char*)"", 0, khi_context_id, sizeof(khi_context_id));
+      cSHAKE128(data, len*8, hash, hash_len, (unsigned char*)"", 0, khi_context_id, sizeof(khi_context_id)*8);
       // SHAKE128(hash, SHA256_DIGEST_LENGTH, data, len);
       // hash_len = SHA256_DIGEST_LENGTH;
       break;
@@ -2650,7 +2657,7 @@ int hi_to_hhit(hi_node *hi, hip_hit hit, int type, const char *hid)
       return(-1);
     }
 
-  // convert hid to bytearray
+  /* convert hid to bytearray */
   uint8_t hid_bytes[4];
   uint8_t hex_byte[3];
   hex_byte[2] = '\0';
@@ -2664,12 +2671,19 @@ int hi_to_hhit(hi_node *hi, hip_hit hit, int type, const char *hid)
     }
 
   
-  /* KHI = Prefix | OGA ID | Encode_n( Hash)
+  /* KHI = Prefix | OGA ID | HID | Encode_n( Hash)
    */
   prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
   memcpy(&hit[4], &hid_bytes, 4);
-  khi_encode_n(hash, hash_len, &hit[8], 64 );
+  if(type == HIT_SUITE_4BIT_EDDSA_CSHAKE128)
+    {
+      memcpy(&hit[8], hash, hash_len/8);
+    }
+  else 
+    {
+      khi_encode_n(hash, hash_len, &hit[8], 64 );
+    }
   /* lower 96 bits of HIT */
   hit[3] |= (0x0F & type); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
   free(data);
