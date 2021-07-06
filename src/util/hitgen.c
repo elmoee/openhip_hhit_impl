@@ -90,6 +90,7 @@ typedef struct _hi_options {
   __u64 r1count;
   char *name;
   int curve_id; // If type is ECDSA, ECDSA_low or EdDSA, this sets it curve id.
+  char *hid; // hierarchy ID
 } hi_options;
 
 extern struct hip_opt OPT;
@@ -245,6 +246,8 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
       xmlNewProp(hi, BAD_CAST "r1count", BAD_CAST tmp);
     }
   xmlNewChild(hi, NULL, BAD_CAST "name", BAD_CAST opts->name);
+  if (strlen(opts->hid) > 0)
+    xmlNewChild(hi, NULL, BAD_CAST "HID", BAD_CAST opts->hid);
 
   const BIGNUM *dsa_p  = NULL, *dsa_q = NULL , *dsa_g = NULL, *dsa_pub_key = NULL, *dsa_priv_key = NULL;
   const BIGNUM *rsa_n = NULL ,*rsa_e = NULL, *rsa_d = NULL, *rsa_p = NULL, *rsa_q = NULL, *rsa_dmp1 = NULL, *rsa_dmq1 = NULL, *rsa_iqmp = NULL;
@@ -352,10 +355,21 @@ int generate_HI(xmlNodePtr root_node, hi_options *opts)
 
   hit.ss_family = AF_INET6;
   hitp = SA2IP(&hit);
-  if (hi_to_hit(&hostid, hitp, hostid.hit_suite_id) < 0)
+  if(strlen(opts->hid) > 0)
     {
-      printf("Error generating HIT!\n");
-      exit(1);
+    if (hi_to_hhit(&hostid, hitp, hostid.hit_suite_id, opts->hid) < 0)
+      {
+        printf("Error generating HIT!\n");
+        exit(1);
+      }
+    }
+  else
+    {
+    if (hi_to_hit(&hostid, hitp, hostid.hit_suite_id) < 0)
+      {
+        printf("Error generating HIT!\n");
+        exit(1);
+      }
     }
 
   if (addr_to_str(SA(&hit), (__u8*)hit_hex, INET6_ADDRSTRLEN))
@@ -632,6 +646,7 @@ void print_hitgen_usage()
   printf(" -length \t specifies the length in bytes for (P,G,Y)\n");
   printf(" -anon \t\t sets the anonymous flag for this HI\n");
   printf(" -incoming \t unsets the allow incoming flag for this HI\n");
+  printf(" -hid \t specify the hid in hexstring with 4 bytes. Used with hit suite 0x50\n");
   printf("Other operating modes:\n");
   printf(" -publish \t extract HITs from the existing '%s'\n",
          HIP_MYID_FILENAME);
@@ -663,7 +678,7 @@ void print_hitgen_usage()
 int main(int argc, char *argv[])
 {
   char name[255], basename[255], filename[255], confname[255];
-  char rnd_seed[255], format[16];
+  char rnd_seed[255], format[16], hid[9];
   int i, have_filename = 0, do_publish = 0, do_conf = 0, do_noinput = 0;
   int do_append = 0;
   hi_options opts;
@@ -716,6 +731,7 @@ int main(int argc, char *argv[])
   opts.r1count = 10;
   opts.hit_suite_id = 1;
   opts.name = name;
+  opts.hid = hid;
 
   /*
    * Command-line parameters
@@ -847,6 +863,16 @@ int main(int argc, char *argv[])
           do_append = 1;
           argv++, argc--;
           continue;
+        }
+      else if (strcmp(*argv, "-hid") == 0)
+        {
+          argv++, argc--;
+          if (argc > 0 && strlen(*argv) == 8)
+            {
+              strncpy(hid, *argv, sizeof(hid));
+              argv++, argc--;
+              continue;
+            }
         }
       print_hitgen_usage();
       exit(1);
@@ -1011,6 +1037,7 @@ int main(int argc, char *argv[])
           opts.type = HI_ALG_DSA;
         }
       sprintf(opts.name, "%s-%d", basename, opts.bitsize);
+      sprintf(opts.hid, "%s", hid);
       generate_HI(root_node, &opts);
     }
   else
@@ -1024,6 +1051,7 @@ int main(int argc, char *argv[])
             }
           opts.bitsize = default_sizes[i];
           sprintf(opts.name, "%s-%d", basename, opts.bitsize);
+          sprintf(opts.hid, "%s", hid);
           generate_HI(root_node, &opts);
         }
     }

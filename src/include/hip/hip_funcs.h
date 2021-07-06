@@ -226,6 +226,7 @@ int validate_solution(const hipcookie *cookie_r, const hipcookie *cookie_i,
                       hip_hit *hit_i, hip_hit *hit_r, unsigned char *solution,
                       size_t rhash_len);
 int hi_to_hit(hi_node *hi, hip_hit hit, int type);
+int hi_to_hhit(hi_node *hi, hip_hit hit, int type ,const char *hid);
 int validate_hit(hip_hit hit, hi_node *hi);
 void print_hex(const void *data, int len);
 void print_binary(void *data, int len);

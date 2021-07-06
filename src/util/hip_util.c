@@ -87,6 +87,7 @@
 #include <libxml/tree.h>
 #include <openssl/pem.h>
 #include "XKCP/SimpleFIPS202.h"
+#include "XKCP/SP800-185.h"
 
 #ifndef HITGEN
 
@@ -2497,8 +2498,10 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
       hash_len = SHA_DIGEST_LENGTH;
       break;
     case HIT_SUITE_4BIT_EDDSA_CSHAKE128: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
-      SHAKE128(hash, SHA256_DIGEST_LENGTH, data, len);
-      hash_len = SHA256_DIGEST_LENGTH;
+      hash_len = 96;
+      cSHAKE128(data, sizeof(data), hash, hash_len, (unsigned char*)"", 0, khi_context_id, sizeof(khi_context_id));
+      // SHAKE128(hash, SHA256_DIGEST_LENGTH, data, len);
+      // hash_len = SHA256_DIGEST_LENGTH;
       break;
     default:
       log_(WARN, "hi_to_hit(): invalid hit_suit (%d)\n",
@@ -2512,6 +2515,161 @@ int hi_to_hit(hi_node *hi, hip_hit hit, int type)
   prefix = htonl(HIT_PREFIX_32BITS);
   memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
   khi_encode_n(hash, hash_len, &hit[4], 96 );
+  /* lower 96 bits of HIT */
+  hit[3] |= (0x0F & type); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
+  free(data);
+  return(0);
+}
+
+int hi_to_hhit(hi_node *hi, hip_hit hit, int type, const char *hid)
+{
+  //printf("Running hi_to_hit with hit: %s with type = %d", hit, type);
+  int len, hash_len;
+  __u8 *data = NULL;
+  SHA_CTX sha1_ctx;
+  SHA256_CTX sha256_ctx;
+  SHA512_CTX sha512_ctx;
+  unsigned char hash[SHA512_DIGEST_LENGTH];
+  __u32 prefix;
+
+  if (!hi)
+    {
+      log_(WARN, "hi_to_hit(): NULL hi\n");
+      return(-1);
+    }
+  const BIGNUM *rsa_e;
+  /* calculate lengths and validate HIs */
+  switch (hi->algorithm_id)
+    {
+    case HI_ALG_DSA:     /* RFC 2536 */
+      if (!hi->dsa)
+        {
+          log_(WARN, "hi_to_hit(): NULL dsa\n");
+          return(-1);
+        }
+      len = sizeof(khi_context_id) + 1 + DSA_PRIV + (3 * hi->size);
+      break;
+    case HI_ALG_RSA:     /* RFC 3110 */
+      if (!hi->rsa)
+        {
+          log_(WARN, "hi_to_hit(): NULL rsa\n");
+          return(-1);
+        }
+      len = sizeof(khi_context_id);
+      RSA_get0_key(hi->rsa, NULL , &rsa_e, NULL);
+
+      len += BN_num_bytes(rsa_e) + RSA_size(hi->rsa);
+
+      if (BN_num_bytes(rsa_e) > 255)
+        {
+          len += 3;
+        }
+      else
+        {
+          len++;
+        }
+      break;
+    case HI_ALG_ECDSA:     /* RFC 4754 */
+      if (!hi->ecdsa)
+        {
+          log_(WARN, "hi_to_hit(): NULL ecdsa\n");
+          return(-1);
+        }
+      len = sizeof(khi_context_id);
+      len += 2;  // Two bytes for the curv_name
+      // Get key length and add to len
+      const EC_GROUP * ec_group = EC_KEY_get0_group(hi->ecdsa);
+      const EC_POINT * ec_point = EC_KEY_get0_public_key(hi->ecdsa);
+      len +=  EC_POINT_point2oct(ec_group, ec_point,
+                                 POINT_CONVERSION_UNCOMPRESSED,
+                                 NULL, 0, 0);
+
+      break;
+    case HI_ALG_EDDSA: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
+      if (!hi->eddsa)
+        {
+          log_(WARN, "hi_to_hit(): NULL eddsa\n");
+          return(-1);
+        }
+      len = sizeof(khi_context_id);
+      len += 2;  // Two bytes for the curv_name
+      // Get key length and add to len
+      size_t keyLen = 0;
+      EVP_PKEY_get_raw_public_key(hi->eddsa, NULL, &keyLen);
+      len += keyLen;
+
+      break;
+    default:
+      log_(WARN, "hi_to_hit(): invalid algorithm (%d)\n",
+           hi->algorithm_id);
+      return(-1);
+    }
+
+  /*
+   * Prepare hash input
+   * input = context_id | input
+   */
+  data = malloc(len);
+  if (!data)
+    {
+      log_(WARN, "hi_to_hit(): malloc(%d) error\n", len);
+      return(-1);
+    }
+  memcpy(&data[0], khi_context_id, sizeof(khi_context_id));
+  khi_hi_input(hi, &data[sizeof(khi_context_id)]);
+  /* Compute the hash */
+  switch (type)
+    {
+    case HIT_SUITE_4BIT_RSA_DSA_SHA256:
+      SHA256_Init(&sha256_ctx);
+      SHA256_Update(&sha256_ctx, data, len);
+      SHA256_Final(hash, &sha256_ctx);
+      hash_len = SHA256_DIGEST_LENGTH;
+      break;
+    case HIT_SUITE_4BIT_ECDSA_SHA384:
+      SHA384_Init(&sha512_ctx);
+      SHA384_Update(&sha512_ctx, data, len);
+      SHA384_Final(hash, &sha512_ctx);
+      hash_len = SHA384_DIGEST_LENGTH;
+      break;
+    case HIT_SUITE_4BIT_ECDSA_LOW_SHA1:
+      SHA1_Init(&sha1_ctx);
+      SHA1_Update(&sha1_ctx, data, len);
+      SHA1_Final(hash, &sha1_ctx);
+      hash_len = SHA_DIGEST_LENGTH;
+      break;
+    case HIT_SUITE_4BIT_EDDSA_CSHAKE128: // TODO: Change this when draft-moskowitz-orchid-cshake-01 is implemented
+      hash_len = 64;
+      cSHAKE128(data, sizeof(data), hash, hash_len, (unsigned char*)"", 0, khi_context_id, sizeof(khi_context_id));
+      // SHAKE128(hash, SHA256_DIGEST_LENGTH, data, len);
+      // hash_len = SHA256_DIGEST_LENGTH;
+      break;
+    default:
+      log_(WARN, "hi_to_hit(): invalid hit_suit (%d)\n",
+           type);
+      return(-1);
+    }
+
+  // convert hid to bytearray
+  uint8_t hid_bytes[4];
+  uint8_t hex_byte[3];
+  hex_byte[2] = '\0';
+  uint8_t count = 0;
+  for(int i = 0; i < (sizeof(hid) - 1); i+=2)
+    {
+      memcpy(hex_byte, &hid[i], 2);
+      uint8_t res = (uint8_t) strtol((const char*) hex_byte, NULL, 16);
+      sscanf((const char*)&res, "%c", &hid_bytes[count]);
+      count++;
+    }
+
+  
+  /* KHI = Prefix | OGA ID | Encode_n( Hash)
+   */
+  prefix = htonl(HIT_PREFIX_32BITS);
+  memcpy(&hit[0], &prefix, 4);       /* 28-bit prefix */
+  memcpy(&hit[4], &hid_bytes, 4);
+  khi_encode_n(hash, hash_len, &hit[8], 64 );
   /* lower 96 bits of HIT */
   hit[3] |= (0x0F & type); /* fixup the 4th byte to contain hit_suite_id (also known as OGA-ID) */
   free(data);
